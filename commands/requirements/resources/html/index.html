@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<!--
+  PLM Workspaces 2.0 — Requirements Management palette
+  Asset load order (ARCHITECTURE §5.1):
+    1. tokens.css      — design tokens
+    2. components.css  — all component styles (no inline-JS styles anywhere)
+    3. bridge.js       — JS↔Python messaging layer (plmSend / plmParse / etc.)
+    4. theme.js        — user preferences + settings gear popover
+    5. config.js       — sets window._plmCfg BEFORE engine reads it
+    6. engine.js       — shared list/detail/form/picker engine
+
+  Relative paths: this file lives at
+    commands/requirements/resources/html/index.html
+  The add-in root is 4 levels up (html→resources→requirements→commands→root).
+  web/core/ and web/capabilities/ are relative to that root:
+    ../../../../web/core/
+    ../../../../web/capabilities/requirements/
+
+  Picker markup is an inline template string inside engine.js (_pickerInlineHtml).
+  There is no picker.html file and no _plmPickerUrl hint needed.
+-->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Requirements Management</title>
+
+<!-- 1. Design tokens -->
+<link rel="stylesheet" href="../../../../web/core/tokens.css">
+<!-- 2. Component styles -->
+<link rel="stylesheet" href="../../../../web/core/components.css">
+</head>
+<body class="pref-text-md theme-applied-light">
+
+<!-- =====================================================================
+     No-Access view — shown when the user lacks the WS_REQUIREMENTS
+     entitlement. Other views (list / detail / form / picker) are rendered
+     by engine.js into the body using CSS class switches.
+     ===================================================================== -->
+<div class="no-access-view" id="noAccessView">
+  <div class="no-access-card">
+    <div class="no-access-icon" aria-hidden="true">&#128274;</div>
+    <h2 class="no-access-title">Access Required</h2>
+    <p class="no-access-body">
+      Your account does not have access to the Requirements workspace in
+      Fusion Manage. Ask your administrator to add you to the appropriate group.
+    </p>
+    <div class="no-access-actions" id="noAccessActions">
+      <button type="button" class="admin-btn" id="btnManageAccess">Manage Access</button>
+      <button type="button" class="admin-btn" id="btnTemplateLibrary">Template Library</button>
+    </div>
+  </div>
+</div>
+
+<!-- =====================================================================
+     List view skeleton — table is populated by engine.js
+     ===================================================================== -->
+<div class="palette-view list-view" id="listView">
+  <div class="palette-header" id="listHeader">
+    <h1 class="palette-title">Requirements Management</h1>
+    <!-- Settings gear is injected by theme.js mountAll() -->
+  </div>
+  <div class="list-toolbar">
+    <select class="view-select" id="viewSelector" title="Select view"></select>
+    <button type="button" class="btn btn-primary btn-sm" id="btnNew">+ New Requirement</button>
+    <button type="button" class="btn btn-sm" id="btnRefresh" title="Refresh list">&#8635;</button>
+  </div>
+  <div class="msg-bar" id="listMsg"></div>
+  <div class="loading-bar" id="listLoading" style="display:none;">Loading…</div>
+  <div class="table-wrap">
+    <table class="data-table" id="dataTable">
+      <thead id="tableHead"></thead>
+      <tbody id="tableBody"></tbody>
+    </table>
+  </div>
+  <div class="pagination">
+    <button type="button" class="btn btn-sm" id="btnPrev" disabled>&#8249; Prev</button>
+    <span class="page-info" id="pageInfo">Page 1</span>
+    <button type="button" class="btn btn-sm" id="btnNext" disabled>Next &#8250;</button>
+  </div>
+</div>
+
+<!-- =====================================================================
+     Detail view skeleton — sections populated by engine.js
+     ===================================================================== -->
+<div class="palette-view detail-view" id="detailView">
+  <div class="palette-header" id="detailHeader">
+    <nav class="breadcrumb" id="detailBreadcrumb" aria-label="Navigation breadcrumb"></nav>
+    <!-- Settings gear is injected by theme.js mountAll() -->
+  </div>
+  <div class="detail-banner" id="detailBanner" style="display:none;" role="status"></div>
+  <div class="msg-bar" id="detailMsg"></div>
+  <div class="loading-bar" id="detailLoading" style="display:none;">Loading…</div>
+  <div class="detail-title-row">
+    <h2 class="detail-title" id="detailTitle"></h2>
+    <div class="detail-toolbar" id="detailToolbar"></div>
+  </div>
+  <!-- Detail tabs are injected by engine.js initDetailTabsForItem() -->
+  <!-- detailScroll wraps the sections pane; engine.js adds .tab-pane to it -->
+  <div class="detail-scroll" id="detailScroll">
+    <div class="detail-sections" id="detailSections"></div>
+  </div>
+  <!-- Workflow transitions -->
+  <div class="workflow-section" id="workflowSection" style="display:none;">
+    <div class="workflow-label">Workflow Actions</div>
+    <div class="transition-btns" id="transitionBtns"></div>
+    <div class="workflow-comment-row">
+      <textarea class="workflow-comment" id="workflowComment"
+                placeholder="Optional comments…" rows="2"></textarea>
+    </div>
+  </div>
+</div>
+
+<!-- =====================================================================
+     Form view skeleton — fields populated by engine.js
+     ===================================================================== -->
+<div class="palette-view form-view" id="formView">
+  <div class="palette-header" id="formHeader">
+    <nav class="breadcrumb" id="formBreadcrumb" aria-label="Navigation breadcrumb"></nav>
+    <!-- Settings gear is injected by theme.js mountAll() -->
+  </div>
+  <div class="msg-bar" id="formMsg"></div>
+  <div class="loading-bar" id="formLoading" style="display:none;">Loading form…</div>
+  <h2 class="form-title" id="formTitle"></h2>
+  <div class="form-sections" id="formSections"></div>
+  <div class="form-footer" id="formFooter" style="display:none;">
+    <button type="button" class="btn btn-primary" id="btnSave">Save</button>
+    <button type="button" class="btn" id="btnCancelForm">Cancel</button>
+    <span class="form-save-msg" id="formSaveMsg"></span>
+  </div>
+</div>
+
+<!-- =====================================================================
+     Scripts — strict load order per ARCHITECTURE §5.1
+     ===================================================================== -->
+<!-- 3. Bridge -->
+<script src="../../../../web/core/bridge.js"></script>
+<!-- 4. Theme / settings gear -->
+<script src="../../../../web/core/theme.js"></script>
+<!-- 5. Capability config (sets window._plmCfg) -->
+<script src="../../../../web/capabilities/requirements/config.js"></script>
+<!-- 6. Shared engine (reads window._plmCfg, injects picker, starts plmCoreInit) -->
+<script src="../../../../web/core/engine.js"></script>
+
+</body>
+</html>

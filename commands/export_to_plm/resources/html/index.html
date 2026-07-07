@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Export to PLM</title>
+<link rel="stylesheet" href="../../../../web/core/tokens.css">
+<link rel="stylesheet" href="../../../../web/core/components.css">
+<style>
+body { margin:0; display:flex; flex-direction:column; height:100vh; overflow:hidden;
+       font-size:var(--font-size-sm,12px); color:var(--color-text,#1a1a1a);
+       background:var(--color-bg,#f0f0f0); }
+
+.eg-header { display:flex; align-items:center; padding:8px 12px; border-bottom:1px solid var(--color-border,#e0e0e0); flex-shrink:0; background:var(--color-surface,#fff); }
+.eg-header h1 { flex:1; margin:0; font-size:var(--font-size-md,14px); font-weight:600; }
+
+.eg-body { flex:1; overflow-y:auto; padding:10px 12px; min-height:0;
+           display:flex; flex-direction:column; gap:10px; }
+.eg-body > * { flex-shrink:0; }
+
+.eg-banner { padding:8px 10px; font-size:12px; border-radius:var(--radius,4px); }
+.eg-banner.info    { background:var(--color-bg-subtle,#f0f0f0); color:var(--color-text-secondary,#555); }
+.eg-banner.error   { background:#fff0f0; color:#c00; border:1px solid #f9d0d0; }
+.eg-banner.warn    { background:#fff8e0; color:#7a5300; border:1px solid #ffe08a; }
+.eg-banner.success { background:#eafff0; color:#1a6b2a; border:1px solid #a3d9a8; }
+
+.eg-card { background:var(--color-surface,#fff); border:1px solid var(--color-border,#e0e0e0);
+           border-radius:var(--radius,4px); overflow:hidden; flex-shrink:0; }
+.eg-card-header { display:flex; align-items:center; justify-content:space-between;
+                  padding:7px 10px; background:var(--color-bg-subtle,#f7f7f7);
+                  border-bottom:1px solid var(--color-border,#f0f0f0); }
+.eg-card-title { font-size:11px; font-weight:600; text-transform:uppercase;
+                 letter-spacing:0.05em; color:var(--color-text-secondary,#666); }
+.eg-card-body { padding:8px 10px; }
+
+/* ── Match table ── */
+.match-table { width:100%; border-collapse:collapse; font-size:11px; }
+.match-table th { text-align:left; padding:5px 6px;
+                  background:var(--color-bg-subtle,#f5f5f5);
+                  border-bottom:2px solid var(--color-border,#e0e0e0);
+                  font-weight:700; color:var(--color-text-secondary,#555);
+                  font-size:10px; text-transform:uppercase; letter-spacing:0.04em; }
+.match-table td { padding:5px 6px; border-bottom:1px solid var(--color-border,#f0f0f0);
+                  vertical-align:middle; }
+.match-table tr:last-child td { border-bottom:none; }
+.match-table tr.row-root { background:var(--color-bg-subtle,#f8f8ff); }
+.match-table tr.row-drawing { background:#fffef0; }
+.match-table tr:hover td { background:var(--color-bg-subtle,#f5f5f5); }
+
+.comp-name-cell { display:flex; flex-direction:column; gap:1px; }
+.comp-name-main { font-weight:500; color:var(--color-text,#222); }
+.comp-name-path { font-size:9px; color:var(--color-text-secondary,#aaa);
+                  overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+                  max-width:160px; }
+.comp-name-meta { display:flex; gap:4px; align-items:center; margin-top:1px; }
+.badge-asm  { font-size:8px; background:#e8f4fd; color:#0696d7;
+              border-radius:2px; padding:0 4px; border:1px solid #b3d9f5; }
+.badge-ext  { font-size:8px; background:#f0f8f0; color:#1a6b2a;
+              border-radius:2px; padding:0 4px; border:1px solid #a3d9a8; }
+.badge-int  { font-size:8px; background:#fdf5e0; color:#7a5300;
+              border-radius:2px; padding:0 4px; border:1px solid #ffe08a; }
+.badge-drw  { font-size:8px; background:#fef0ff; color:#7a0099;
+              border-radius:2px; padding:0 4px; border:1px solid #e5b3f5; }
+.inst-count { font-size:9px; color:var(--color-text-secondary,#999); }
+
+.plm-match-cell { display:flex; flex-direction:column; gap:1px; }
+.plm-match-title { font-weight:500; color:var(--color-text,#222);
+                   overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+                   max-width:160px; }
+.plm-match-meta { font-size:9px; color:var(--color-text-secondary,#999); }
+.no-match { color:var(--color-text-secondary,#bbb); font-style:italic; font-size:10px; }
+.searching { color:var(--color-accent,#0696d7); font-size:10px; }
+
+.last-exp { font-size:10px; color:var(--color-text-secondary,#888); white-space:nowrap; }
+.last-exp.never { color:var(--color-text-secondary,#ccc); font-style:italic; }
+
+/* Status column */
+.status-cell { font-size:10px; white-space:nowrap; }
+.status-cell.pending   { color:var(--color-text-secondary,#ccc); }
+.status-cell.searching { color:var(--color-accent,#0696d7); }
+.status-cell.exporting { color:#e8a000; }
+.status-cell.uploading { color:#0696d7; }
+.status-cell.done      { color:#1a6b2a; }
+.status-cell.error     { color:#c00; }
+.status-cell.skipped   { color:#bbb; }
+
+/* Include checkboxes */
+.include-step-cb, .include-pdf-cb { cursor:pointer; }
+
+/* ── PLM match cell with Change button ── */
+.plm-cell-wrap { display:flex; align-items:flex-start; gap:4px; }
+.plm-cell-wrap .plm-match-cell { flex:1; min-width:0; }
+.btn-change-match {
+    font-size:9px; padding:1px 5px; white-space:nowrap; flex-shrink:0;
+    border:1px solid var(--color-border,#ccc); border-radius:3px;
+    background:var(--color-bg,#f5f5f5); color:var(--color-text-secondary,#666);
+    cursor:pointer; line-height:1.4;
+}
+.btn-change-match:hover { border-color:var(--color-accent,#0696d7);
+                           color:var(--color-accent,#0696d7); }
+
+/* ── Inline search expansion row ── */
+tr.search-panel-row td { padding:6px 8px; background:var(--color-bg-subtle,#f8f9fc);
+                         border-bottom:2px solid var(--color-accent,#0696d7); }
+.match-search-panel { display:flex; flex-direction:column; gap:6px; }
+.match-search-input {
+    width:100%; box-sizing:border-box;
+    padding:5px 8px; font-size:12px;
+    border:1px solid var(--color-accent,#0696d7); border-radius:4px;
+    background:var(--color-surface,#fff); color:var(--color-text,#1a1a1a);
+    outline:none;
+}
+.match-candidates { display:flex; flex-direction:column; gap:1px; max-height:180px;
+                    overflow-y:auto; }
+.match-candidate {
+    display:flex; flex-direction:column; gap:1px;
+    padding:5px 8px; border-radius:3px; cursor:pointer;
+    border:1px solid transparent;
+}
+.match-candidate:hover { background:var(--color-bg,#edf5fc);
+                          border-color:var(--color-accent,#0696d7); }
+.match-candidate-title { font-size:11px; font-weight:500; color:var(--color-text,#222);
+                          overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.match-candidate-meta { font-size:9px; color:var(--color-text-secondary,#888);
+                         display:flex; gap:5px; align-items:center; }
+.match-clear { padding:5px 8px; font-size:11px; color:#c00; cursor:pointer;
+               border-radius:3px; border:1px dashed #f9d0d0; text-align:center; }
+.match-clear:hover { background:#fff0f0; }
+.match-searching { font-size:11px; color:var(--color-text-secondary,#888);
+                   padding:4px 8px; font-style:italic; }
+.match-no-results { font-size:11px; color:var(--color-text-secondary,#bbb);
+                    padding:4px 8px; font-style:italic; }
+
+/* Revision filter for manual override */
+.rev-filter { display:flex; gap:4px; margin-bottom:8px; }
+.rev-btn { flex:1; padding:3px; font-size:10px; border:1px solid var(--color-border,#ccc);
+           border-radius:var(--radius,4px); background:var(--color-bg,#f0f0f0);
+           color:var(--color-text-secondary,#666); cursor:pointer; text-align:center; }
+.rev-btn.active { border-color:var(--color-accent,#0696d7);
+                  background:var(--color-accent,#0696d7); color:#fff; }
+
+/* Upload results */
+.upload-target-group { margin-bottom:8px; }
+.upload-target-header { display:flex; align-items:center; justify-content:space-between;
+                        gap:6px; padding:4px 6px; background:var(--color-bg-subtle,#f5f5f5);
+                        border-radius:3px; margin-bottom:3px; }
+.upload-target-label { font-size:11px; font-weight:600; color:var(--color-text-secondary,#555);
+                       flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.upload-open-btn { font-size:10px; padding:2px 6px; white-space:nowrap; flex-shrink:0; }
+.upload-result-row { padding:3px 6px; font-size:12px; border-bottom:1px solid var(--color-border,#f5f5f5); }
+.upload-result-row:last-child { border-bottom:none; }
+.result-ok   { color:#1a6b2a; }
+.result-fail { color:#c00; }
+
+/* Progress */
+.step-progress { display:flex; align-items:center; justify-content:center; padding:10px 20px 4px; }
+.step-item { display:flex; flex-direction:column; align-items:center; gap:3px; min-width:70px; }
+.step-dot { width:24px; height:24px; border-radius:50%; border:2px solid var(--color-border,#ccc);
+            display:flex; align-items:center; justify-content:center;
+            font-size:10px; font-weight:600; color:var(--color-text-secondary,#999);
+            background:var(--color-bg,#f0f0f0); transition:all .25s ease; flex-shrink:0; }
+.step-dot.active { border-color:var(--color-accent,#0696d7); background:var(--color-accent,#0696d7);
+                   color:#fff; animation:pulse-dot 1.2s ease-in-out infinite; }
+.step-dot.done  { border-color:#1a6b2a; background:#1a6b2a; color:#fff; }
+.step-dot.error { border-color:#c00; background:#c00; color:#fff; }
+@keyframes pulse-dot { 0%,100%{box-shadow:0 0 0 0 rgba(6,150,215,.35);}50%{box-shadow:0 0 0 5px rgba(6,150,215,0);} }
+.step-label { font-size:10px; color:var(--color-text-secondary,#999); text-align:center; white-space:nowrap; }
+.step-label.active { color:var(--color-accent,#0696d7); font-weight:600; }
+.step-label.done   { color:#1a6b2a; }
+.step-label.error  { color:#c00; }
+.step-connector { flex:1; height:2px; background:var(--color-border,#e0e0e0);
+                  margin:0 4px; margin-bottom:16px; max-width:50px; transition:background .25s ease; }
+.step-connector.done { background:#1a6b2a; }
+
+/* ── Component time badge ── */
+.comp-time-badge {
+    font-size:9px; padding:2px 6px;
+    background:#fff8e0; color:#7a5300;
+    border-radius:3px; border:1px solid #ffe08a;
+    font-weight:600; white-space:nowrap;
+}
+.comp-warn-strip {
+    font-size:10px; color:#7a5300;
+    background:#fffbf0;
+    padding:5px 10px; border-bottom:1px solid #ffe08a;
+    display:flex; align-items:center; gap:6px;
+}
+
+/* Footer */
+.eg-footer { flex-shrink:0; padding:10px 12px; border-top:1px solid var(--color-border,#e0e0e0);
+             background:var(--color-surface,#fff); display:flex; flex-direction:column; gap:8px; }
+.footer-actions { display:flex; gap:8px; align-items:center; }
+.eg-input { flex:1; padding:5px 8px; border:1px solid var(--color-border,#ccc);
+            border-radius:var(--radius,4px); font-size:12px; background:var(--color-surface,#fff);
+            color:var(--color-text,#1a1a1a); outline:none; min-width:0; }
+.eg-input:focus { border-color:var(--color-accent,#0696d7); }
+
+/* Dark theme */
+body.theme-applied-dark .eg-header,
+body.theme-dark .eg-header { background:var(--color-surface,#2a2a2a); }
+body.theme-applied-dark .eg-footer,
+body.theme-dark .eg-footer { background:var(--color-surface,#2a2a2a); }
+body.theme-applied-dark .eg-card,
+body.theme-dark .eg-card { background:var(--color-surface,#222); }
+body.theme-applied-dark .eg-card-header,
+body.theme-dark .eg-card-header { background:var(--color-bg-subtle,#2a2a2a); }
+</style>
+</head>
+<body class="pref-text-md theme-applied-light">
+
+<div class="eg-header palette-header">
+  <h1>Export to PLM</h1>
+</div>
+
+<div id="initBanner" class="eg-banner info" style="margin:10px 12px;">
+  Scanning design&hellip;
+</div>
+
+<div id="mainContent" style="display:none; flex:1; overflow:hidden; min-height:0; flex-direction:column;">
+<div class="eg-body">
+
+  <!-- ── CARD 1: ASSEMBLY & DRAWINGS ── -->
+  <div class="eg-card">
+    <div class="eg-card-header">
+      <span class="eg-card-title">Assembly &amp; Drawings</span>
+      <div style="display:flex; gap:6px; align-items:center;">
+        <span id="matchStatus" style="font-size:10px; color:var(--color-text-secondary,#888);">Searching PLM&hellip;</span>
+        <div class="rev-filter" id="revFilter" style="margin-bottom:0;">
+          <button type="button" class="rev-btn active" data-rev="1">Latest</button>
+          <button type="button" class="rev-btn" data-rev="2">All</button>
+          <button type="button" class="rev-btn" data-rev="3">Working</button>
+        </div>
+      </div>
+    </div>
+    <div class="eg-card-body" style="padding:0; overflow-x:auto;">
+      <div id="asmMsg" class="eg-banner" style="margin:8px 10px; display:none;"></div>
+      <table class="match-table" id="asmTable" style="display:none;">
+        <thead>
+          <tr>
+            <th style="width:28px;">STEP</th>
+            <th style="width:28px; border-left:1px solid var(--color-border,#e0e0e0);">PDF</th>
+            <th>Item</th>
+            <th>PLM Record</th>
+            <th>Last Export</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody id="asmBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ── CARD 2: COMPONENT STEPs (opt-in, unchecked by default) ── -->
+  <div class="eg-card" id="compCard" style="display:none;">
+    <div class="eg-card-header">
+      <div style="display:flex; align-items:center; gap:8px;">
+        <span class="eg-card-title">Component STEPs</span>
+        <span class="comp-time-badge" id="compTimeBadge" style="display:none;"></span>
+      </div>
+      <div style="display:flex; gap:6px; align-items:center;">
+        <button type="button" id="btnSkipExported" class="btn btn-sm" style="display:none;"
+                title="Uncheck components that have a previous STEP export">
+          Skip Exported
+        </button>
+        <label style="font-size:10px; display:flex; align-items:center; gap:4px; cursor:pointer;">
+          <input type="checkbox" id="checkAllComp"> All
+        </label>
+      </div>
+    </div>
+    <div class="comp-warn-strip" id="compWarnStrip" style="display:none;">
+      ⚠ Exporting individual components is slow — only check what you need.
+        Uncheck previously exported rows to skip them.
+    </div>
+    <div class="eg-card-body" style="padding:0; overflow-x:auto;">
+      <div id="compMsg" class="eg-banner" style="margin:8px 10px; display:none;"></div>
+      <table class="match-table" id="compTable" style="display:none;">
+        <thead>
+          <tr>
+            <th style="width:28px;">STEP</th>
+            <th style="width:28px; border-left:1px solid var(--color-border,#e0e0e0);"></th>
+            <th>Component</th>
+            <th>PLM Record</th>
+            <th>Last Export</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody id="compBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ── UPLOAD RESULTS ── -->
+  <div id="resultsCard" class="eg-card" style="display:none;">
+    <div class="eg-card-header"><span class="eg-card-title">Upload Results</span></div>
+    <div class="eg-card-body" id="resultsBody"></div>
+  </div>
+
+</div><!-- /eg-body -->
+
+<!-- ── Footer ── -->
+<div class="eg-footer">
+
+  <div id="stepProgress" style="display:none;">
+    <div class="step-progress">
+      <div class="step-item">
+        <div class="step-dot" id="dotSearch">1</div>
+        <div class="step-label" id="lblSearch">PLM Match</div>
+      </div>
+      <div class="step-connector" id="conn1"></div>
+      <div class="step-item">
+        <div class="step-dot" id="dotExport">2</div>
+        <div class="step-label" id="lblExport">Export Files</div>
+      </div>
+      <div class="step-connector" id="conn2"></div>
+      <div class="step-item">
+        <div class="step-dot" id="dotUpload">3</div>
+        <div class="step-label" id="lblUpload">Upload to PLM</div>
+      </div>
+    </div>
+    <div id="progressMsg" class="eg-banner info" style="margin-top:6px;"></div>
+  </div>
+
+  <input type="text" id="uploadComment" class="eg-input"
+         placeholder="Upload comment (optional)" autocomplete="off" maxlength="500">
+
+  <div class="footer-actions">
+    <button type="button" id="btnExport" class="btn btn-primary" style="flex:1;" disabled>
+      &#9650;&nbsp; Export &amp; Upload Selected
+    </button>
+  </div>
+
+  <div id="newRunRow" style="display:none;">
+    <button type="button" id="btnNewRun" class="btn btn-sm">Export Another &rarr;</button>
+  </div>
+
+</div>
+</div><!-- /mainContent -->
+
+<script src="../../../../web/core/bridge.js"></script>
+<script src="../../../../web/core/theme.js"></script>
+<script src="static/export_to_plm.js"></script>
+</body>
+</html>

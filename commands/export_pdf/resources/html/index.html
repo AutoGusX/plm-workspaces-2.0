@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Export Drawing PDF to PLM</title>
+<link rel="stylesheet" href="../../../../web/core/tokens.css">
+<link rel="stylesheet" href="../../../../web/core/components.css">
+<style>
+body { margin:0; display:flex; flex-direction:column; height:100vh; overflow:hidden; font-size:var(--font-size-sm,12px); color:var(--color-text,#1a1a1a); background:var(--color-bg,#f0f0f0); }
+.eg-header { display:flex; align-items:center; padding:8px 12px; border-bottom:1px solid var(--color-border,#e0e0e0); flex-shrink:0; background:var(--color-surface,#fff); }
+.eg-header h1 { flex:1; margin:0; font-size:var(--font-size-md,14px); font-weight:600; }
+.eg-body { flex:1; overflow-y:auto; padding:10px 12px; min-height:0; display:flex; flex-direction:column; gap:10px; }
+.eg-body > * { flex-shrink:0; }
+.eg-banner { padding:8px 10px; font-size:12px; border-radius:var(--radius,4px); }
+.eg-banner.info    { background:var(--color-bg-subtle,#f0f0f0); color:var(--color-text-secondary,#555); }
+.eg-banner.error   { background:#fff0f0; color:#c00; border:1px solid #f9d0d0; }
+.eg-banner.warn    { background:#fff8e0; color:#7a5300; border:1px solid #ffe08a; }
+.eg-banner.success { background:#eafff0; color:#1a6b2a; border:1px solid #a3d9a8; }
+.eg-card { background:var(--color-surface,#fff); border:1px solid var(--color-border,#e0e0e0); border-radius:var(--radius,4px); overflow:hidden; flex-shrink:0; }
+.eg-card-header { display:flex; align-items:center; justify-content:space-between; padding:7px 10px; background:var(--color-bg-subtle,#f7f7f7); border-bottom:1px solid var(--color-border,#f0f0f0); }
+.eg-card-title { font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.05em; color:var(--color-text-secondary,#666); }
+.eg-card-body { padding:8px 10px; }
+.drawing-list {}
+.drawing-row { display:flex; align-items:center; gap:8px; padding:5px 2px; border-bottom:1px solid var(--color-border,#f5f5f5); font-size:12px; cursor:pointer; border-radius:3px; }
+.drawing-row:last-child { border-bottom:none; }
+.drawing-row:hover { background:var(--color-bg-subtle,#f5f5f5); padding-left:4px; }
+.drawing-name { flex:1; color:var(--color-text,#222); }
+.drawing-badge { font-size:10px; color:var(--color-text-secondary,#888); background:var(--color-bg,#f0f0f0); border-radius:3px; padding:1px 5px; white-space:nowrap; }
+.check-all-row { font-size:11px; color:var(--color-text-secondary,#666); cursor:pointer; display:flex; align-items:center; gap:4px; }
+.mode-toggle { display:flex; border:1px solid var(--color-border,#ccc); border-radius:var(--radius,4px); overflow:hidden; }
+.mode-btn { padding:2px 8px; font-size:10px; border:none; border-right:1px solid var(--color-border,#ccc); background:var(--color-bg,#f0f0f0); color:var(--color-text-secondary,#666); cursor:pointer; }
+.mode-btn:last-child { border-right:none; }
+.mode-btn.active { background:var(--color-accent,#0696d7); color:#fff; }
+.rev-filter { display:flex; gap:4px; margin-bottom:8px; }
+.rev-btn { flex:1; padding:4px; font-size:11px; border:1px solid var(--color-border,#ccc); border-radius:var(--radius,4px); background:var(--color-bg,#f0f0f0); color:var(--color-text-secondary,#666); cursor:pointer; text-align:center; }
+.rev-btn.active { border-color:var(--color-accent,#0696d7); background:var(--color-accent,#0696d7); color:#fff; }
+.search-row { display:flex; gap:6px; margin-bottom:8px; }
+.eg-input { flex:1; padding:5px 8px; border:1px solid var(--color-border,#ccc); border-radius:var(--radius,4px); font-size:12px; background:var(--color-surface,#fff); color:var(--color-text,#1a1a1a); outline:none; min-width:0; }
+.eg-input:focus { border-color:var(--color-accent,#0696d7); }
+.comp-list { border:1px solid var(--color-border,#e0e0e0); border-radius:var(--radius,4px); background:var(--color-surface,#fff); }
+.comp-row { display:flex; align-items:flex-start; gap:8px; padding:7px 10px; border-bottom:1px solid var(--color-border,#f0f0f0); cursor:pointer; }
+.comp-row:last-child { border-bottom:none; }
+.comp-row:hover { background:var(--color-bg-subtle,#f0f7fc); }
+.comp-row input[type="checkbox"] { margin-top:2px; flex-shrink:0; }
+.comp-info { flex:1; min-width:0; }
+.comp-title { font-size:12px; font-weight:500; color:var(--color-text,#222); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.comp-meta { font-size:10px; color:var(--color-text-secondary,#888); margin-top:2px; display:flex; gap:6px; align-items:center; flex-wrap:wrap; }
+.comp-version { font-weight:600; color:var(--color-text,#444); }
+.comp-thumb { width:38px; height:38px; border-radius:4px; object-fit:cover; flex-shrink:0; border:1px solid var(--color-border,#e0e0e0); background:var(--color-bg,#f0f0f0); align-self:center; }
+.badge-latest  { background:#0696d7; color:#fff; border-radius:3px; padding:1px 5px; font-size:9px; font-weight:600; text-transform:uppercase; }
+.badge-working { background:#e8a000; color:#fff; border-radius:3px; padding:1px 5px; font-size:9px; font-weight:600; text-transform:uppercase; }
+.badge-superseded { background:#d46000; color:#fff; border-radius:3px; padding:1px 5px; font-size:9px; font-weight:600; text-transform:uppercase; }
+.selection-hint { margin-top:6px; font-size:11px; color:var(--color-text-secondary,#888); }
+.upload-target-group { margin-bottom:8px; }
+.upload-target-header { display:flex; align-items:center; justify-content:space-between; gap:6px; padding:4px 6px; background:var(--color-bg-subtle,#f5f5f5); border-radius:3px; margin-bottom:3px; }
+.upload-target-label { font-size:11px; font-weight:600; color:var(--color-text-secondary,#555); flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.upload-open-btn { font-size:10px; padding:2px 6px; white-space:nowrap; flex-shrink:0; }
+.upload-result-row { padding:3px 6px; font-size:12px; border-bottom:1px solid var(--color-border,#f5f5f5); }
+.upload-result-row:last-child { border-bottom:none; }
+.result-ok   { color:#1a6b2a; }
+.result-fail { color:#c00; }
+.step-progress { display:flex; align-items:center; justify-content:center; gap:0; padding:10px 20px 4px; }
+.step-item { display:flex; flex-direction:column; align-items:center; gap:3px; min-width:70px; }
+.step-dot { width:26px; height:26px; border-radius:50%; border:2px solid var(--color-border,#ccc); display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:600; color:var(--color-text-secondary,#999); background:var(--color-bg,#f0f0f0); transition:all .25s ease; flex-shrink:0; }
+.step-dot.active { border-color:var(--color-accent,#0696d7); background:var(--color-accent,#0696d7); color:#fff; animation:pulse-dot 1.2s ease-in-out infinite; }
+.step-dot.done   { border-color:#1a6b2a; background:#1a6b2a; color:#fff; }
+.step-dot.error  { border-color:#c00; background:#c00; color:#fff; }
+@keyframes pulse-dot { 0%,100%{box-shadow:0 0 0 0 rgba(6,150,215,.35);}50%{box-shadow:0 0 0 5px rgba(6,150,215,0);} }
+.step-label { font-size:10px; color:var(--color-text-secondary,#999); text-align:center; white-space:nowrap; }
+.step-label.active { color:var(--color-accent,#0696d7); font-weight:600; }
+.step-label.done   { color:#1a6b2a; }
+.step-label.error  { color:#c00; }
+.step-connector { flex:1; height:2px; background:var(--color-border,#e0e0e0); margin:0 4px; margin-bottom:18px; max-width:60px; transition:background .25s ease; }
+.step-connector.done { background:#1a6b2a; }
+.eg-footer { flex-shrink:0; padding:10px 12px; border-top:1px solid var(--color-border,#e0e0e0); background:var(--color-surface,#fff); display:flex; flex-direction:column; gap:8px; }
+.footer-actions { display:flex; gap:8px; align-items:center; }
+body.theme-applied-dark .eg-header,body.theme-dark .eg-header { background:var(--color-surface,#2a2a2a); }
+body.theme-applied-dark .eg-footer,body.theme-dark .eg-footer { background:var(--color-surface,#2a2a2a); }
+body.theme-applied-dark .eg-card,body.theme-dark .eg-card { background:var(--color-surface,#222); }
+body.theme-applied-dark .eg-card-header,body.theme-dark .eg-card-header { background:var(--color-bg-subtle,#2a2a2a); }
+body.theme-applied-dark .comp-list,body.theme-dark .comp-list { background:var(--color-surface,#222); }
+</style>
+</head>
+<body class="pref-text-md theme-applied-light">
+
+<div class="eg-header palette-header">
+  <h1>Export Drawing PDF to PLM</h1>
+</div>
+
+<div id="initBanner" class="eg-banner info" style="margin:10px 12px;">
+  Loading context&hellip;
+</div>
+
+<div id="mainContent" style="display:none; flex:1; overflow:hidden; min-height:0; flex-direction:column;">
+  <div class="eg-body">
+
+    <!-- ── OPEN DRAWINGS ── -->
+    <div class="eg-card">
+      <div class="eg-card-header">
+        <span class="eg-card-title">Open Drawings</span>
+        <label class="check-all-row">
+          <input type="checkbox" id="checkAll" checked> Select all
+        </label>
+      </div>
+      <div class="eg-card-body">
+        <div class="drawing-list" id="drawingList"></div>
+        <div id="drawingMsg" class="eg-banner" style="display:none; margin-top:6px;"></div>
+      </div>
+    </div>
+
+    <!-- ── TARGET COMPONENT ── -->
+    <div class="eg-card">
+      <div class="eg-card-header">
+        <span class="eg-card-title">Target Component</span>
+        <div class="mode-toggle">
+          <button type="button" class="mode-btn active" id="btnModeAuto">Auto</button>
+          <button type="button" class="mode-btn" id="btnModeManual">Manual</button>
+        </div>
+      </div>
+      <div class="eg-card-body">
+        <div class="rev-filter" id="revFilter">
+          <button type="button" class="rev-btn" data-rev="1">Latest Released</button>
+          <button type="button" class="rev-btn active" data-rev="2">All Revisions</button>
+          <button type="button" class="rev-btn" data-rev="3">Working</button>
+        </div>
+        <div id="autoSection">
+          <div id="autoMsg" class="eg-banner" style="display:none;"></div>
+          <div id="autoResults" class="comp-list" style="display:none;"></div>
+        </div>
+        <div id="manualSection" style="display:none;">
+          <div class="search-row">
+            <input type="search" id="searchInput" class="eg-input" placeholder="Search by part number or name&hellip;" autocomplete="off">
+            <button type="button" id="btnSearch" class="btn btn-sm">Search</button>
+          </div>
+          <div id="manualMsg" class="eg-banner" style="display:none;"></div>
+          <div id="manualResults" class="comp-list" style="display:none;"></div>
+        </div>
+        <div id="selectionHint" class="selection-hint" style="display:none;">
+          <span id="selectionCount">0</span> revision<span id="selectionPlural">s</span> selected
+        </div>
+      </div>
+    </div>
+
+    <!-- ── UPLOAD RESULTS ── -->
+    <div id="resultsCard" class="eg-card" style="display:none;">
+      <div class="eg-card-header"><span class="eg-card-title">Upload Results</span></div>
+      <div class="eg-card-body" id="resultsBody"></div>
+    </div>
+
+  </div>
+
+  <!-- ── Footer ── -->
+  <div class="eg-footer">
+    <div id="stepProgress" style="display:none;">
+      <div class="step-progress">
+        <div class="step-item">
+          <div class="step-dot" id="dotExport">1</div>
+          <div class="step-label" id="lblExport">Export PDF</div>
+        </div>
+        <div class="step-connector" id="connExport"></div>
+        <div class="step-item">
+          <div class="step-dot" id="dotUpload">2</div>
+          <div class="step-label" id="lblUpload">Upload to PLM</div>
+        </div>
+      </div>
+      <div id="progressMsg" class="eg-banner info" style="margin-top:6px;"></div>
+    </div>
+    <input type="text" id="uploadComment" class="eg-input" placeholder="Upload comment (optional)" autocomplete="off" maxlength="500">
+    <div class="footer-actions">
+      <button type="button" id="btnUpload" class="btn btn-primary" style="flex:1;" disabled>
+        &#9650;&nbsp; Export &amp; Upload to PLM
+      </button>
+    </div>
+    <div id="newRunRow" style="display:none;">
+      <button type="button" id="btnNewRun" class="btn btn-sm">Export Another &rarr;</button>
+    </div>
+  </div>
+</div>
+
+<script src="../../../../web/core/bridge.js"></script>
+<script src="../../../../web/core/theme.js"></script>
+<script src="static/export_pdf.js"></script>
+</body>
+</html>

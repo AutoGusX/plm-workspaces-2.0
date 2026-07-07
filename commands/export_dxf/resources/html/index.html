@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Export DXF to PLM</title>
+<link rel="stylesheet" href="../../../../web/core/tokens.css">
+<link rel="stylesheet" href="../../../../web/core/components.css">
+<style>
+body {
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    overflow: hidden;
+    font-size: var(--font-size-sm, 12px);
+    color: var(--color-text, #1a1a1a);
+    background: var(--color-bg, #f0f0f0);
+}
+
+/* ── Header ── */
+.eg-header {
+    display: flex; align-items: center;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--color-border, #e0e0e0);
+    flex-shrink: 0;
+    background: var(--color-surface, #fff);
+}
+.eg-header h1 {
+    flex: 1; margin: 0;
+    font-size: var(--font-size-md, 14px);
+    font-weight: 600;
+}
+
+/* ── Body (scrollable) ── */
+.eg-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 10px 12px;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+.eg-body > * { flex-shrink: 0; }
+
+/* ── Banners ── */
+.eg-banner { padding: 8px 10px; font-size: 12px; border-radius: var(--radius, 4px); }
+.eg-banner.info    { background: var(--color-bg-subtle, #f0f0f0); color: var(--color-text-secondary, #555); }
+.eg-banner.error   { background: #fff0f0; color: #c00; border: 1px solid #f9d0d0; }
+.eg-banner.warn    { background: #fff8e0; color: #7a5300; border: 1px solid #ffe08a; }
+.eg-banner.success { background: #eafff0; color: #1a6b2a; border: 1px solid #a3d9a8; }
+
+/* ── Cards ── */
+.eg-card {
+    background: var(--color-surface, #fff);
+    border: 1px solid var(--color-border, #e0e0e0);
+    border-radius: var(--radius, 4px);
+    overflow: hidden;
+    flex-shrink: 0;
+}
+.eg-card-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 7px 10px;
+    background: var(--color-bg-subtle, #f7f7f7);
+    border-bottom: 1px solid var(--color-border, #f0f0f0);
+}
+.eg-card-title {
+    font-size: 11px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.05em;
+    color: var(--color-text-secondary, #666);
+}
+.eg-card-body { padding: 8px 10px; }
+
+/* ── Mode toggle ── */
+.mode-toggle {
+    display: flex;
+    border: 1px solid var(--color-border, #ccc);
+    border-radius: var(--radius, 4px);
+    overflow: hidden;
+}
+.mode-btn {
+    padding: 2px 10px; font-size: 10px;
+    border: none; border-right: 1px solid var(--color-border, #ccc);
+    background: var(--color-bg, #f0f0f0);
+    color: var(--color-text-secondary, #666); cursor: pointer;
+}
+.mode-btn:last-child { border-right: none; }
+.mode-btn.active { background: var(--color-accent, #0696d7); color: #fff; }
+
+/* ── Options row ── */
+.options-row {
+    display: flex; gap: 10px; align-items: center;
+    flex-wrap: wrap;
+    margin-bottom: 8px;
+}
+.opt-group { display: flex; flex-direction: column; gap: 2px; }
+.opt-label { font-size: 10px; color: var(--color-text-secondary, #888); font-weight: 600; text-transform: uppercase; }
+.eg-select {
+    padding: 3px 6px; font-size: 12px;
+    border: 1px solid var(--color-border, #ccc);
+    border-radius: var(--radius, 4px);
+    background: var(--color-surface, #fff);
+    color: var(--color-text, #1a1a1a);
+}
+.radio-row { display: flex; gap: 8px; align-items: center; }
+.radio-row label { display: flex; gap: 4px; align-items: center; font-size: 11px; cursor: pointer; }
+
+/* ── File mode ── */
+.file-mode-row {
+    display: flex; gap: 12px; align-items: center;
+    padding: 6px 0 2px;
+    font-size: 11px;
+}
+.file-mode-row label { display: flex; gap: 4px; align-items: center; cursor: pointer; }
+#singleNameRow { display: none; margin-top: 6px; }
+
+/* ── Item list (flat patterns / sketches) ── */
+.item-list { border: 1px solid var(--color-border, #e0e0e0); border-radius: 4px; background: var(--color-surface, #fff); }
+.item-row {
+    display: flex; align-items: center; gap: 8px;
+    padding: 5px 8px;
+    border-bottom: 1px solid var(--color-border, #f0f0f0);
+    font-size: 12px; cursor: pointer;
+}
+.item-row:last-child { border-bottom: none; }
+.item-row:hover { background: var(--color-bg-subtle, #f5f5f5); }
+.item-name { flex: 1; color: var(--color-text, #222); }
+.item-meta { font-size: 10px; color: var(--color-text-secondary, #888); }
+.check-all-row {
+    font-size: 11px; color: var(--color-text-secondary, #666);
+    cursor: pointer; display: flex; align-items: center; gap: 4px;
+    margin-bottom: 6px;
+}
+.search-row { display: flex; gap: 6px; margin-bottom: 6px; }
+.eg-input {
+    flex: 1; padding: 5px 8px;
+    border: 1px solid var(--color-border, #ccc);
+    border-radius: var(--radius, 4px); font-size: 12px;
+    background: var(--color-surface, #fff);
+    color: var(--color-text, #1a1a1a); outline: none; min-width: 0;
+}
+.eg-input:focus { border-color: var(--color-accent, #0696d7); }
+
+/* ── Revision filter ── */
+.rev-filter { display: flex; gap: 4px; margin-bottom: 8px; }
+.rev-btn {
+    flex: 1; padding: 4px; font-size: 11px;
+    border: 1px solid var(--color-border, #ccc);
+    border-radius: var(--radius, 4px);
+    background: var(--color-bg, #f0f0f0);
+    color: var(--color-text-secondary, #666); cursor: pointer; text-align: center;
+}
+.rev-btn.active { border-color: var(--color-accent, #0696d7); background: var(--color-accent, #0696d7); color: #fff; }
+
+/* ── Component tiles ── */
+.comp-list { border: 1px solid var(--color-border, #e0e0e0); border-radius: var(--radius, 4px); background: var(--color-surface, #fff); }
+.comp-row { display: flex; align-items: flex-start; gap: 8px; padding: 7px 10px; border-bottom: 1px solid var(--color-border, #f0f0f0); cursor: pointer; }
+.comp-row:last-child { border-bottom: none; }
+.comp-row:hover { background: var(--color-bg-subtle, #f0f7fc); }
+.comp-row input[type="checkbox"] { margin-top: 2px; flex-shrink: 0; }
+.comp-info { flex: 1; min-width: 0; }
+.comp-title { font-size: 12px; font-weight: 500; color: var(--color-text, #222); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.comp-meta { font-size: 10px; color: var(--color-text-secondary, #888); margin-top: 2px; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.comp-version { font-weight: 600; color: var(--color-text, #444); }
+.comp-thumb { width: 38px; height: 38px; border-radius: 4px; object-fit: cover; flex-shrink: 0; border: 1px solid var(--color-border, #e0e0e0); background: var(--color-bg, #f0f0f0); align-self: center; }
+.badge-latest  { background: #0696d7; color: #fff; border-radius: 3px; padding: 1px 5px; font-size: 9px; font-weight: 600; text-transform: uppercase; }
+.badge-working { background: #e8a000; color: #fff; border-radius: 3px; padding: 1px 5px; font-size: 9px; font-weight: 600; text-transform: uppercase; }
+.badge-superseded { background: #d46000; color: #fff; border-radius: 3px; padding: 1px 5px; font-size: 9px; font-weight: 600; text-transform: uppercase; }
+.selection-hint { margin-top: 6px; font-size: 11px; color: var(--color-text-secondary, #888); }
+
+/* ── Attachment mapping table ── */
+.mapping-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+.mapping-table th {
+    text-align: left; padding: 4px 6px;
+    background: var(--color-bg-subtle, #f5f5f5);
+    border-bottom: 1px solid var(--color-border, #e0e0e0);
+    font-weight: 600; color: var(--color-text-secondary, #555);
+    text-transform: uppercase; font-size: 10px; letter-spacing: 0.04em;
+}
+.mapping-table td { padding: 5px 6px; border-bottom: 1px solid var(--color-border, #f0f0f0); vertical-align: middle; }
+.mapping-table tr:last-child td { border-bottom: none; }
+.mapping-select { font-size: 11px; padding: 2px 4px; border: 1px solid var(--color-border, #ccc); border-radius: 3px; background: var(--color-surface, #fff); width: 100%; }
+.mapping-name-input { font-size: 11px; padding: 2px 6px; border: 1px solid var(--color-border, #ccc); border-radius: 3px; background: var(--color-surface, #fff); width: 100%; box-sizing: border-box; }
+
+/* ── Upload results ── */
+.upload-target-group { margin-bottom: 8px; }
+.upload-target-header { display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 4px 6px; background: var(--color-bg-subtle, #f5f5f5); border-radius: 3px; margin-bottom: 3px; }
+.upload-target-label { font-size: 11px; font-weight: 600; color: var(--color-text-secondary, #555); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.upload-open-btn { font-size: 10px; padding: 2px 6px; white-space: nowrap; flex-shrink: 0; }
+.upload-result-row { padding: 3px 6px; font-size: 12px; border-bottom: 1px solid var(--color-border, #f5f5f5); }
+.upload-result-row:last-child { border-bottom: none; }
+.result-ok   { color: #1a6b2a; }
+.result-fail { color: #c00; }
+
+/* ── Step progress ── */
+.step-progress { display: flex; align-items: center; justify-content: center; gap: 0; padding: 10px 20px 4px; }
+.step-item { display: flex; flex-direction: column; align-items: center; gap: 3px; min-width: 70px; }
+.step-dot { width: 26px; height: 26px; border-radius: 50%; border: 2px solid var(--color-border, #ccc); display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 600; color: var(--color-text-secondary, #999); background: var(--color-bg, #f0f0f0); transition: all 0.25s ease; flex-shrink: 0; }
+.step-dot.active { border-color: var(--color-accent, #0696d7); background: var(--color-accent, #0696d7); color: #fff; animation: pulse-dot 1.2s ease-in-out infinite; }
+.step-dot.done  { border-color: #1a6b2a; background: #1a6b2a; color: #fff; }
+.step-dot.error { border-color: #c00; background: #c00; color: #fff; }
+@keyframes pulse-dot { 0%,100% { box-shadow: 0 0 0 0 rgba(6,150,215,.35); } 50% { box-shadow: 0 0 0 5px rgba(6,150,215,0); } }
+.step-label { font-size: 10px; color: var(--color-text-secondary, #999); text-align: center; white-space: nowrap; }
+.step-label.active { color: var(--color-accent, #0696d7); font-weight: 600; }
+.step-label.done   { color: #1a6b2a; }
+.step-label.error  { color: #c00; }
+.step-connector { flex: 1; height: 2px; background: var(--color-border, #e0e0e0); margin: 0 4px; margin-bottom: 18px; max-width: 60px; transition: background 0.25s ease; }
+.step-connector.done { background: #1a6b2a; }
+
+/* ── Footer ── */
+.eg-footer { flex-shrink: 0; padding: 10px 12px; border-top: 1px solid var(--color-border, #e0e0e0); background: var(--color-surface, #fff); display: flex; flex-direction: column; gap: 8px; }
+.footer-actions { display: flex; gap: 8px; align-items: center; }
+
+/* ── Dark theme ── */
+body.theme-applied-dark .eg-header,
+body.theme-dark .eg-header { background: var(--color-surface, #2a2a2a); }
+body.theme-applied-dark .eg-footer,
+body.theme-dark .eg-footer { background: var(--color-surface, #2a2a2a); }
+body.theme-applied-dark .eg-card,
+body.theme-dark .eg-card { background: var(--color-surface, #222); }
+body.theme-applied-dark .eg-card-header,
+body.theme-dark .eg-card-header { background: var(--color-bg-subtle, #2a2a2a); }
+body.theme-applied-dark .comp-list,
+body.theme-dark .comp-list,
+body.theme-applied-dark .item-list,
+body.theme-dark .item-list { background: var(--color-surface, #222); }
+</style>
+</head>
+<body class="pref-text-md theme-applied-light">
+
+<div class="eg-header palette-header">
+  <h1>Export DXF to PLM</h1>
+</div>
+
+<div id="initBanner" class="eg-banner info" style="margin:10px 12px;">
+  Loading design context&hellip;
+</div>
+
+<div id="mainContent" style="display:none; flex:1; overflow:hidden; min-height:0; flex-direction:column;">
+
+  <div class="eg-body">
+
+    <!-- ── EXPORT SOURCE ── -->
+    <div class="eg-card">
+      <div class="eg-card-header">
+        <span class="eg-card-title">Export Source</span>
+        <div class="mode-toggle">
+          <button type="button" class="mode-btn active" id="btnModeFlatPattern">Flat Pattern</button>
+          <button type="button" class="mode-btn" id="btnModeSketch">Sketch</button>
+        </div>
+      </div>
+      <div class="eg-card-body">
+
+        <!-- Flat pattern options -->
+        <div id="flatPatternSection">
+          <div class="options-row">
+            <div class="opt-group">
+              <span class="opt-label">Scale</span>
+              <select id="scaleSelect" class="eg-select">
+                <option value="1">1:1 (Full scale)</option>
+                <option value="0.5">1:2</option>
+                <option value="0.2">1:5</option>
+                <option value="0.1">1:10</option>
+                <option value="0.01">1:100</option>
+                <option value="2">2:1</option>
+              </select>
+            </div>
+            <div class="opt-group">
+              <span class="opt-label">Grain Direction</span>
+              <div class="radio-row">
+                <label><input type="radio" name="grain" value="none" checked> None</label>
+                <label><input type="radio" name="grain" value="x"> Along X</label>
+                <label><input type="radio" name="grain" value="y"> Along Y</label>
+              </div>
+            </div>
+          </div>
+          <label class="check-all-row">
+            <input type="checkbox" id="checkAllFp" checked> Select all flat patterns
+          </label>
+          <div id="fpMsg" class="eg-banner" style="display:none;"></div>
+          <div class="item-list" id="fpList"></div>
+        </div>
+
+        <!-- Sketch options -->
+        <div id="sketchSection" style="display:none;">
+          <div class="options-row">
+            <div class="opt-group">
+              <span class="opt-label">Scale</span>
+              <select id="scaleSelectSk" class="eg-select">
+                <option value="1">1:1 (Full scale)</option>
+                <option value="0.5">1:2</option>
+                <option value="0.2">1:5</option>
+                <option value="0.1">1:10</option>
+                <option value="0.01">1:100</option>
+                <option value="2">2:1</option>
+              </select>
+            </div>
+          </div>
+          <div class="search-row">
+            <input type="search" id="sketchSearch" class="eg-input"
+                   placeholder="Filter sketches&hellip;" autocomplete="off">
+          </div>
+          <label class="check-all-row">
+            <input type="checkbox" id="checkAllSk" checked> Select all visible
+          </label>
+          <div id="sketchMsg" class="eg-banner" style="display:none;"></div>
+          <div class="item-list" id="sketchList"></div>
+        </div>
+
+        <!-- File mode -->
+        <div style="margin-top:8px; padding-top:8px; border-top:1px solid var(--color-border,#f0f0f0);">
+          <span class="opt-label">Output files</span>
+          <div class="file-mode-row" style="margin-top:4px;">
+            <label><input type="radio" name="fileMode" value="individual" checked> Individual files</label>
+            <label><input type="radio" name="fileMode" value="single"> Single combined file</label>
+          </div>
+          <div id="singleNameRow">
+            <input type="text" id="singleFileName" class="eg-input"
+                   placeholder="Combined file name (without .dxf)" autocomplete="off">
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ── TARGET COMPONENT ── -->
+    <div class="eg-card">
+      <div class="eg-card-header">
+        <span class="eg-card-title">Target Component</span>
+        <div class="mode-toggle">
+          <button type="button" class="mode-btn active" id="btnCompAuto">Auto</button>
+          <button type="button" class="mode-btn" id="btnCompManual">Manual</button>
+        </div>
+      </div>
+      <div class="eg-card-body">
+        <div class="rev-filter" id="revFilter">
+          <button type="button" class="rev-btn" data-rev="1">Latest Released</button>
+          <button type="button" class="rev-btn active" data-rev="2">All Revisions</button>
+          <button type="button" class="rev-btn" data-rev="3">Working</button>
+        </div>
+
+        <div id="compAutoSection">
+          <div id="compAutoMsg" class="eg-banner" style="display:none;"></div>
+          <div id="compAutoResults" class="comp-list" style="display:none;"></div>
+        </div>
+
+        <div id="compManualSection" style="display:none;">
+          <div class="search-row">
+            <input type="search" id="compSearchInput" class="eg-input"
+                   placeholder="Search by part number or name&hellip;" autocomplete="off">
+            <button type="button" id="btnCompSearch" class="btn btn-sm">Search</button>
+          </div>
+          <div id="compManualMsg" class="eg-banner" style="display:none;"></div>
+          <div id="compManualResults" class="comp-list" style="display:none;"></div>
+        </div>
+
+        <div id="compSelectionHint" class="selection-hint" style="display:none;">
+          <span id="compSelCount">0</span> revision<span id="compSelPlural">s</span> selected
+        </div>
+      </div>
+    </div>
+
+    <!-- ── ATTACHMENT MAPPING ── -->
+    <div class="eg-card" id="mappingCard" style="display:none;">
+      <div class="eg-card-header">
+        <span class="eg-card-title">Attachment Mapping</span>
+        <button type="button" id="btnRefreshMapping" class="btn btn-sm">&#8635; Refresh</button>
+      </div>
+      <div class="eg-card-body">
+        <div id="mappingMsg" class="eg-banner info" style="margin-bottom:6px;">
+          Select export source and component to see attachment options.
+        </div>
+        <table class="mapping-table" id="mappingTable" style="display:none;">
+          <thead>
+            <tr>
+              <th style="width:36%">DXF File</th>
+              <th style="width:30%">Action</th>
+              <th>Name / Target</th>
+            </tr>
+          </thead>
+          <tbody id="mappingBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ── UPLOAD RESULTS ── -->
+    <div id="resultsCard" class="eg-card" style="display:none;">
+      <div class="eg-card-header">
+        <span class="eg-card-title">Upload Results</span>
+      </div>
+      <div class="eg-card-body" id="resultsBody"></div>
+    </div>
+
+  </div><!-- /eg-body -->
+
+  <!-- ── Footer ── -->
+  <div class="eg-footer">
+
+    <!-- Step progress -->
+    <div id="stepProgress" style="display:none;">
+      <div class="step-progress">
+        <div class="step-item">
+          <div class="step-dot" id="dotExport">1</div>
+          <div class="step-label" id="lblExport">Export DXF</div>
+        </div>
+        <div class="step-connector" id="connExport"></div>
+        <div class="step-item">
+          <div class="step-dot" id="dotUpload">2</div>
+          <div class="step-label" id="lblUpload">Upload to PLM</div>
+        </div>
+      </div>
+      <div id="progressMsg" class="eg-banner info" style="margin-top:6px;"></div>
+    </div>
+
+    <!-- Upload comment -->
+    <input type="text" id="uploadComment" class="eg-input"
+           placeholder="Upload comment (optional)" autocomplete="off" maxlength="500">
+
+    <!-- Upload button -->
+    <div class="footer-actions">
+      <button type="button" id="btnUpload" class="btn btn-primary" style="flex:1;" disabled>
+        &#9650;&nbsp; Export &amp; Upload to PLM
+      </button>
+    </div>
+
+    <!-- Export another -->
+    <div id="newRunRow" style="display:none;">
+      <button type="button" id="btnNewRun" class="btn btn-sm">Export Another &rarr;</button>
+    </div>
+
+  </div>
+
+</div><!-- /mainContent -->
+
+<script src="../../../../web/core/bridge.js"></script>
+<script src="../../../../web/core/theme.js"></script>
+<script src="static/export_dxf.js"></script>
+</body>
+</html>

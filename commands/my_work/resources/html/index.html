@@ -1,0 +1,798 @@
+<!DOCTYPE html>
+<!--
+  PLM Workspaces 2.0 — My Work palette (full feature port)
+  Self-contained: does NOT use engine.js or window._plmCfg.
+  Asset load order: tokens.css → components.css → bridge.js → theme.js → my_work.js
+  Relative base: commands/my_work/resources/html/  (add-in root is 4 levels up)
+-->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>My Work</title>
+<link rel="stylesheet" href="../../../../web/core/tokens.css">
+<link rel="stylesheet" href="../../../../web/core/components.css">
+<style>
+/* ------------------------------------------------------------------ */
+/* My Work — page chrome                                               */
+/* ------------------------------------------------------------------ */
+body {
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    overflow: hidden;
+    font-size: var(--font-size-sm, 12px);
+    color: var(--color-text, #1a1a1a);
+    background: var(--color-bg, #f0f0f0);
+}
+#viewList, #viewDetail {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    overflow: hidden;
+    min-height: 0;
+}
+#viewDetail { display: none; }
+
+/* ------------------------------------------------------------------ */
+/* Header                                                              */
+/* ------------------------------------------------------------------ */
+.mw-header {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2, 8px);
+    padding: var(--space-2, 8px) var(--space-3, 12px);
+    border-bottom: 1px solid var(--color-border, #e0e0e0);
+    flex-shrink: 0;
+    background: var(--color-surface, #fff);
+}
+.mw-header h1 {
+    flex: 1;
+    margin: 0;
+    font-size: var(--font-size-md, 14px);
+    font-weight: 600;
+}
+
+/* ------------------------------------------------------------------ */
+/* Search row                                                          */
+/* ------------------------------------------------------------------ */
+#searchRow {
+    display: none;
+    padding: var(--space-1, 4px) var(--space-3, 12px);
+    border-bottom: 1px solid var(--color-border, #e0e0e0);
+    background: var(--color-surface, #fff);
+    flex-shrink: 0;
+}
+#searchInput {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 4px 8px;
+    border: 1px solid var(--color-border, #ccc);
+    border-radius: var(--radius, 4px);
+    font-size: var(--font-size-sm, 12px);
+    background: var(--color-bg, #fff);
+    color: var(--color-text, #1a1a1a);
+    outline: none;
+}
+#searchInput:focus { border-color: var(--color-accent, #0696d7); }
+
+/* ------------------------------------------------------------------ */
+/* Filter chips                                                        */
+/* ------------------------------------------------------------------ */
+#filterChips {
+    display: none;
+    flex-wrap: wrap;
+    gap: 4px;
+    padding: var(--space-1, 4px) var(--space-3, 12px);
+    border-bottom: 1px solid var(--color-border, #e0e0e0);
+    background: var(--color-surface, #fff);
+    flex-shrink: 0;
+}
+.filter-chip {
+    border: 1px solid var(--color-border, #ccc);
+    border-radius: 10px;
+    background: transparent;
+    padding: 2px 10px;
+    font-size: 11px;
+    cursor: pointer;
+    color: var(--color-text, #333);
+    transition: background 0.1s, color 0.1s;
+}
+.filter-chip:hover { border-color: var(--color-accent, #0696d7); }
+.filter-chip.active {
+    background: var(--color-accent, #0696d7);
+    color: #fff;
+    border-color: var(--color-accent, #0696d7);
+}
+
+/* ------------------------------------------------------------------ */
+/* Sort / group / filter row                                           */
+/* ------------------------------------------------------------------ */
+#sortGroupRow {
+    display: none;
+    flex-wrap: wrap;
+    gap: 4px;
+    padding: var(--space-1, 4px) var(--space-3, 12px);
+    border-bottom: 1px solid var(--color-border, #e0e0e0);
+    background: var(--color-surface, #fff);
+    flex-shrink: 0;
+    align-items: center;
+}
+#sortGroupRow select {
+    font-size: 11px;
+    padding: 2px 4px;
+    border: 1px solid var(--color-border, #ccc);
+    border-radius: var(--radius, 4px);
+    background: var(--color-bg, #fff);
+    color: var(--color-text, #333);
+    max-width: 120px;
+}
+#sortGroupRow label {
+    font-size: 10px;
+    color: var(--color-text-secondary, #666);
+    margin-right: 2px;
+}
+
+/* ------------------------------------------------------------------ */
+/* Summary strip                                                       */
+/* ------------------------------------------------------------------ */
+#summaryStripContainer {
+    display: none;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+    padding: var(--space-1, 4px) var(--space-3, 12px);
+    border-bottom: 1px solid var(--color-border, #e0e0e0);
+    background: var(--color-bg-subtle, #f7f7f7);
+    font-size: 11px;
+    flex-shrink: 0;
+}
+.summary-stat { color: var(--color-text-secondary, #555); }
+.summary-stat strong { color: var(--color-text, #222); }
+#lastUpdatedEl {
+    display: none;
+    color: var(--color-text-secondary, #888);
+    font-size: 10px;
+    white-space: nowrap;
+}
+#summaryStripContainer .mw-spacer { flex: 1; }
+#autoRefreshSelect {
+    font-size: 10px;
+    padding: 1px 3px;
+    border: 1px solid var(--color-border, #ccc);
+    border-radius: 3px;
+    background: var(--color-bg, #fff);
+    color: var(--color-text, #333);
+}
+
+/* ------------------------------------------------------------------ */
+/* Toolbar (count badge + filter summary + preview toggle + refresh)  */
+/* ------------------------------------------------------------------ */
+.mw-toolbar {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2, 8px);
+    padding: var(--space-1, 4px) var(--space-3, 12px);
+    border-bottom: 1px solid var(--color-border, #e0e0e0);
+    background: var(--color-surface, #fff);
+    flex-shrink: 0;
+}
+.mw-count-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 20px;
+    height: 20px;
+    padding: 0 6px;
+    background: var(--color-accent, #0696d7);
+    color: #fff;
+    border-radius: 10px;
+    font-size: 11px;
+    font-weight: 600;
+}
+#filterSummary {
+    font-size: 11px;
+    color: var(--color-text-secondary, #666);
+    display: none;
+}
+.mw-spacer { flex: 1; }
+
+/* ------------------------------------------------------------------ */
+/* List + preview two-column layout                                    */
+/* ------------------------------------------------------------------ */
+.mw-list-view-content {
+    display: flex;
+    flex-direction: row;
+    flex: 1;
+    overflow: hidden;
+    min-height: 0;
+}
+.mw-list-pane {
+    flex: 1;
+    overflow-y: auto;
+    padding: var(--space-2, 8px) var(--space-3, 12px);
+    min-width: 0;
+}
+
+/* ------------------------------------------------------------------ */
+/* Loading / error states                                              */
+/* ------------------------------------------------------------------ */
+#taskLoading {
+    display: none;
+    padding: var(--space-3, 12px);
+    color: var(--color-text-secondary, #666);
+    font-size: var(--font-size-sm, 12px);
+    text-align: center;
+}
+#taskError {
+    display: none;
+    padding: var(--space-2, 8px) var(--space-3, 12px);
+    background: var(--color-error-bg, #fff0f0);
+    border: 1px solid var(--color-error, #c00);
+    border-radius: var(--radius, 4px);
+    color: var(--color-error, #c00);
+    font-size: var(--font-size-sm, 12px);
+    margin-bottom: var(--space-2, 8px);
+}
+
+/* ------------------------------------------------------------------ */
+/* Task tiles                                                          */
+/* ------------------------------------------------------------------ */
+.mw-tile {
+    padding: 7px 10px;
+    border: 1px solid var(--color-border, #e0e0e0);
+    border-left-width: 3px;
+    border-left-color: transparent;
+    border-radius: var(--radius, 4px);
+    margin-bottom: 4px;
+    cursor: pointer;
+    background: var(--color-surface, #fff);
+    user-select: none;
+    transition: border-color 0.1s, box-shadow 0.1s;
+    position: relative;
+}
+.mw-tile:hover {
+    border-right-color: var(--color-accent, #0696d7);
+    border-top-color: var(--color-accent, #0696d7);
+    border-bottom-color: var(--color-accent, #0696d7);
+}
+.mw-tile-selected {
+    background: var(--color-accent-subtle, #e8f4fd);
+    border-right-color: var(--color-accent, #0696d7) !important;
+    border-top-color: var(--color-accent, #0696d7) !important;
+    border-bottom-color: var(--color-accent, #0696d7) !important;
+}
+.tile-due-overdue { border-left-color: #c00 !important; }
+.tile-due-today   { border-left-color: #e67700 !important; }
+.tile-due-soon    { border-left-color: #c9a100 !important; }
+.tile-due-later   { border-left-color: var(--color-border, #ccc); }
+.tile-due-none    { border-left-color: var(--color-border, #ccc); }
+
+.tile-descriptor {
+    font-size: var(--font-size-sm, 12px);
+    font-weight: 600;
+    color: var(--color-text, #1a1a1a);
+    line-height: 1.3;
+    margin-bottom: 3px;
+}
+.tile-meta {
+    font-size: 11px;
+    color: var(--color-text-secondary, #666);
+    margin-bottom: 2px;
+}
+.tile-due {
+    font-size: 11px;
+    color: var(--color-text-secondary, #666);
+}
+.tile-due-overdue .tile-due { color: #c00; }
+.tile-due-today   .tile-due { color: #e67700; }
+.tile-due-soon    .tile-due { color: #8a6000; }
+.tile-related { font-size: 11px; color: var(--color-accent, #0696d7); margin-top: 2px; }
+.tile-related-icon { margin-right: 3px; }
+
+/* Group headers */
+.mw-group-header {
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--color-text-secondary, #666);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    padding: var(--space-2, 8px) 0 var(--space-1, 4px) 0;
+    border-bottom: 1px solid var(--color-border, #e0e0e0);
+    margin-bottom: 4px;
+    margin-top: var(--space-2, 8px);
+}
+.mw-group-header:first-child { margin-top: 0; }
+
+/* Empty state */
+.mw-empty {
+    text-align: center;
+    padding: var(--space-5, 32px) var(--space-3, 12px);
+    color: var(--color-text-secondary, #666);
+    font-size: var(--font-size-sm, 12px);
+}
+
+/* ------------------------------------------------------------------ */
+/* Preview panel                                                       */
+/* ------------------------------------------------------------------ */
+#previewPanel {
+    display: none;
+    width: 220px;
+    min-width: 160px;
+    border-left: 1px solid var(--color-border, #e0e0e0);
+    background: var(--color-surface, #fff);
+    flex-direction: column;
+    flex-shrink: 0;
+    overflow: hidden;
+}
+#previewPanel.preview-visible { display: flex; }
+.preview-header {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 8px;
+    border-bottom: 1px solid var(--color-border, #e0e0e0);
+    background: var(--color-bg-subtle, #f7f7f7);
+    flex-shrink: 0;
+}
+.preview-header-title { font-size: 11px; font-weight: 600; flex: 1; color: var(--color-text-secondary, #555); }
+.preview-resize-btn {
+    border: 1px solid var(--color-border, #ccc);
+    background: transparent;
+    padding: 1px 5px;
+    font-size: 11px;
+    border-radius: 3px;
+    cursor: pointer;
+    color: var(--color-text-secondary, #555);
+}
+.preview-resize-btn:hover { background: var(--color-bg, #eee); }
+#previewRelatedBanner {
+    display: none;
+    background: var(--color-accent, #0696d7);
+    color: #fff;
+    font-size: 10px;
+    padding: 3px 8px;
+    text-align: center;
+}
+#previewEmpty {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    color: var(--color-text-secondary, #888);
+    padding: 16px;
+    text-align: center;
+}
+#previewLoading {
+    display: none;
+    padding: 16px;
+    text-align: center;
+    font-size: 11px;
+    color: var(--color-text-secondary, #888);
+}
+#previewContent {
+    display: none;
+    flex: 1;
+    overflow-y: auto;
+    flex-direction: column;
+    padding: 8px;
+}
+#previewContent.preview-visible-content { display: flex; }
+#previewTitle {
+    font-size: var(--font-size-sm, 12px);
+    font-weight: 600;
+    line-height: 1.3;
+    margin-bottom: 2px;
+}
+#previewMeta {
+    font-size: 10px;
+    color: var(--color-text-secondary, #666);
+    margin-bottom: 6px;
+}
+#previewRelatedBadge {
+    display: none;
+    font-size: 10px;
+    color: var(--color-accent, #0696d7);
+    margin-bottom: 4px;
+}
+.preview-field-row {
+    margin-bottom: 5px;
+    font-size: 11px;
+}
+.preview-field-label {
+    font-size: 10px;
+    color: var(--color-text-secondary, #777);
+    font-weight: 500;
+    margin-bottom: 1px;
+}
+.preview-field-value { color: var(--color-text, #222); }
+.preview-field-value-rich a { color: var(--color-accent, #0696d7); text-decoration: none; }
+.preview-no-actions { font-size: 11px; color: var(--color-text-secondary, #888); }
+.preview-section-label {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--color-text-secondary, #888);
+    margin: 8px 0 4px 0;
+    border-top: 1px solid var(--color-border, #eee);
+    padding-top: 6px;
+}
+.preview-actions-row { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 4px; }
+#previewComment {
+    width: 100%;
+    box-sizing: border-box;
+    font-size: 11px;
+    padding: 4px;
+    border: 1px solid var(--color-border, #ccc);
+    border-radius: 3px;
+    background: var(--color-bg, #fff);
+    color: var(--color-text, #222);
+    resize: vertical;
+    min-height: 40px;
+    margin-top: 4px;
+}
+.preview-open-btn {
+    width: 100%;
+    margin-top: 6px;
+    font-size: 11px;
+    padding: 4px;
+}
+#previewBanner {
+    display: none;
+    padding: 4px 8px;
+    font-size: 11px;
+    border-top: 1px solid var(--color-border, #eee);
+    flex-shrink: 0;
+}
+#previewBanner.success { background: #eaffea; color: #1a6b1a; }
+#previewBanner.error   { background: #fff0f0; color: #c00; }
+
+/* ------------------------------------------------------------------ */
+/* Bulk action bar                                                     */
+/* ------------------------------------------------------------------ */
+#bulkBar {
+    display: none;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    border-top: 1px solid var(--color-accent, #0696d7);
+    background: var(--color-accent-subtle, #e8f4fd);
+    flex-shrink: 0;
+    font-size: 11px;
+}
+#bulkLabel { font-weight: 600; color: var(--color-accent, #0696d7); }
+#bulkTransition {
+    font-size: 11px;
+    padding: 2px 4px;
+    border: 1px solid var(--color-border, #ccc);
+    border-radius: 3px;
+    background: var(--color-surface, #fff);
+    max-width: 160px;
+}
+#bulkComment {
+    font-size: 11px;
+    padding: 2px 6px;
+    border: 1px solid var(--color-border, #ccc);
+    border-radius: 3px;
+    background: var(--color-surface, #fff);
+    width: 100px;
+}
+#bulkMessage {
+    display: none;
+    font-size: 11px;
+}
+#bulkMessage.success { color: #1a6b1a; }
+#bulkMessage.error   { color: #c00; }
+
+/* ------------------------------------------------------------------ */
+/* Detail view                                                         */
+/* ------------------------------------------------------------------ */
+.detail-header-bar {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2, 8px);
+    padding: var(--space-2, 8px) var(--space-3, 12px);
+    border-bottom: 1px solid var(--color-border, #e0e0e0);
+    background: var(--color-surface, #fff);
+    flex-shrink: 0;
+    flex-wrap: wrap;
+}
+#detailBreadcrumb {
+    flex: 1;
+    font-size: 11px;
+    color: var(--color-text-secondary, #666);
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.bread-link { color: var(--color-accent, #0696d7); text-decoration: none; cursor: pointer; }
+.bread-link:hover { text-decoration: underline; }
+.bread-sep { color: var(--color-text-secondary, #aaa); }
+.bread-current { color: var(--color-text, #333); font-weight: 500; }
+#detailRelatedBanner {
+    display: none;
+    background: var(--color-accent, #0696d7);
+    color: #fff;
+    font-size: 11px;
+    padding: 4px 12px;
+    flex-shrink: 0;
+}
+.detail-title-row {
+    padding: var(--space-2, 8px) var(--space-3, 12px) 0;
+    flex-shrink: 0;
+    background: var(--color-surface, #fff);
+}
+#detailTitle {
+    font-size: var(--font-size-md, 14px);
+    font-weight: 600;
+    line-height: 1.3;
+}
+#detailMeta {
+    font-size: 11px;
+    color: var(--color-text-secondary, #666);
+    margin-top: 2px;
+    margin-bottom: 4px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+#detailRelatedBadge {
+    display: none;
+    font-size: 10px;
+    color: #fff;
+    background: var(--color-accent, #0696d7);
+    border-radius: 3px;
+    padding: 1px 5px;
+}
+#detailBanner {
+    display: none;
+    padding: 6px 12px;
+    font-size: 11px;
+    flex-shrink: 0;
+}
+#detailBanner.success { background: #eaffea; color: #1a6b1a; border-top: 1px solid #b2d8b2; }
+#detailBanner.error   { background: #fff0f0; color: #c00; border-top: 1px solid #f99; }
+#detailDetails {
+    flex: 1;
+    overflow-y: auto;
+    padding: var(--space-2, 8px) var(--space-3, 12px);
+}
+
+/* Detail sections */
+.detail-section { margin-bottom: var(--space-2, 8px); }
+.section-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: var(--font-size-sm, 12px);
+    font-weight: 600;
+    padding: 5px 0;
+    cursor: pointer;
+    border-bottom: 1px solid var(--color-border, #e0e0e0);
+    color: var(--color-text, #222);
+}
+.section-arrow { font-size: 10px; transition: transform 0.15s; }
+.section-header.collapsed .section-arrow { transform: rotate(-90deg); }
+.section-content { padding: var(--space-1, 4px) 0; }
+.section-content.collapsed { display: none; }
+.section-bulk { display: flex; gap: 6px; margin-bottom: 6px; }
+.field-row { display: flex; gap: 8px; padding: 3px 0; font-size: var(--font-size-sm, 12px); border-bottom: 1px solid var(--color-border, #f0f0f0); }
+.field-label { min-width: 100px; max-width: 140px; font-weight: 500; color: var(--color-text-secondary, #666); flex-shrink: 0; }
+.field-value { flex: 1; color: var(--color-text, #222); word-break: break-word; }
+.detail-loading { display: flex; align-items: center; gap: 8px; padding: 16px; color: var(--color-text-secondary, #666); font-size: var(--font-size-sm, 12px); }
+.detail-item-link { color: var(--color-accent, #0696d7); text-decoration: none; cursor: pointer; }
+.detail-item-link:hover { text-decoration: underline; }
+.multi-value-entry { margin-bottom: 2px; }
+.detail-field-img { max-width: 100%; height: auto; border-radius: 2px; margin-top: 4px; }
+.detail-field-img-placeholder, .detail-field-img-failed { font-size: 11px; color: var(--color-text-secondary, #888); }
+
+/* ------------------------------------------------------------------ */
+/* Dark-theme overrides                                                */
+/* ------------------------------------------------------------------ */
+body.theme-applied-dark .mw-tile,
+body.theme-dark .mw-tile { background: var(--color-surface, #2a2a2a); border-color: var(--color-border, #444); }
+body.theme-applied-dark .mw-tile:hover,
+body.theme-dark .mw-tile:hover { border-right-color: var(--color-accent, #38b2f8); border-top-color: var(--color-accent, #38b2f8); border-bottom-color: var(--color-accent, #38b2f8); }
+body.theme-applied-dark .mw-tile-selected,
+body.theme-dark .mw-tile-selected { background: rgba(56,178,248,0.12); }
+body.theme-applied-dark #previewPanel,
+body.theme-dark #previewPanel { background: var(--color-surface, #2a2a2a); border-color: var(--color-border, #444); }
+body.theme-applied-dark .detail-header-bar,
+body.theme-dark .detail-header-bar { background: var(--color-surface, #2a2a2a); }
+body.theme-applied-dark .detail-title-row,
+body.theme-dark .detail-title-row { background: var(--color-surface, #2a2a2a); }
+</style>
+</head>
+<body class="pref-text-md theme-applied-light">
+
+<!-- =================================================================
+     VIEW: LIST
+     ================================================================= -->
+<div id="viewList">
+
+  <!-- Header -->
+  <div class="mw-header palette-header" id="mwHeader">
+    <h1>My Work</h1>
+    <!-- Settings gear injected by theme.js mountAll() -->
+  </div>
+
+  <!-- Search row (shown after tasks load) -->
+  <div id="searchRow">
+    <input type="search" id="searchInput" placeholder="Search tasks&hellip;" autocomplete="off">
+  </div>
+
+  <!-- Quick filter chips -->
+  <div id="filterChips">
+    <button type="button" class="filter-chip active" data-filter="all" onclick="setQuickFilter('all')">All</button>
+    <button type="button" class="filter-chip" data-filter="overdue" onclick="setQuickFilter('overdue')">Overdue</button>
+    <button type="button" class="filter-chip" data-filter="dueSoon" onclick="setQuickFilter('dueSoon')">Due Soon</button>
+    <button type="button" class="filter-chip" data-filter="highPriority" onclick="setQuickFilter('highPriority')">High Priority</button>
+  </div>
+
+  <!-- Sort / group / workspace / date-preset row -->
+  <div id="sortGroupRow">
+    <label>Sort</label>
+    <select id="sortBy" onchange="setSortAndRender()">
+      <option value="dueDate">Due date</option>
+      <option value="workspace">Workspace</option>
+      <option value="state">State</option>
+      <option value="priority">Priority</option>
+      <option value="descriptor">Title</option>
+    </select>
+    <select id="sortDir" onchange="setSortAndRender()">
+      <option value="asc">↑ Asc</option>
+      <option value="desc">↓ Desc</option>
+    </select>
+    <label>Group</label>
+    <select id="groupBy" onchange="setGroupByAndRender()">
+      <option value="none">No group</option>
+      <option value="workspace">Workspace</option>
+      <option value="dueDateBucket">Due date</option>
+      <option value="priority">Priority</option>
+      <option value="state">State</option>
+    </select>
+    <select id="workspaceFilter" onchange="setWorkspaceFilterAndRender()">
+      <option value="">All workspaces</option>
+    </select>
+    <select id="datePresetFilter" onchange="setDatePresetAndRender()">
+      <option value="">Any date</option>
+      <option value="created7">Created ≤7 days</option>
+      <option value="created30">Created ≤30 days</option>
+      <option value="modified7">Modified ≤7 days</option>
+      <option value="modified30">Modified ≤30 days</option>
+      <option value="older30">Older than 30 days</option>
+    </select>
+  </div>
+
+  <!-- Summary strip -->
+  <div id="summaryStripContainer">
+    <span class="summary-stat"><strong id="summaryTotal">0</strong> total</span>
+    <span class="summary-stat"><strong id="summaryOverdue" style="color:#c00">0</strong> overdue</span>
+    <span class="summary-stat"><strong id="summaryDueSoon" style="color:#b45309">0</strong> due soon</span>
+    <span class="summary-stat"><strong id="summaryHighPriority">0</strong> flagged</span>
+    <span class="mw-spacer"></span>
+    <span id="lastUpdatedEl"></span>
+    <select id="autoRefreshSelect" title="Auto-refresh interval" onchange="setAutoRefreshInterval()">
+      <option value="0">No auto-refresh</option>
+      <option value="5">Every 5 min</option>
+      <option value="15">Every 15 min</option>
+      <option value="30">Every 30 min</option>
+    </select>
+  </div>
+
+  <!-- Toolbar -->
+  <div class="mw-toolbar">
+    <span class="mw-count-badge" id="taskCount">0</span>
+    <span id="filterSummary"></span>
+    <span class="mw-spacer"></span>
+    <button type="button" class="btn btn-sm" id="btnPreview" onclick="togglePreview()" title="Toggle side-by-side preview">Show preview</button>
+    <button type="button" class="btn btn-sm" id="btnRefresh" title="Refresh task list">&#8635; Refresh</button>
+  </div>
+
+  <!-- List content (task pane + optional preview panel) -->
+  <div class="mw-list-view-content" id="listViewContent">
+
+    <!-- Task pane -->
+    <div class="mw-list-pane">
+      <div id="taskLoading">Loading your work items&hellip;</div>
+      <div id="taskError" role="alert"><span id="taskErrorMsg"></span></div>
+      <div id="taskList"></div>
+    </div>
+
+    <!-- Preview panel (shown when preview enabled) -->
+    <div id="previewPanel">
+      <div class="preview-header">
+        <span class="preview-header-title">Preview</span>
+        <button type="button" class="preview-resize-btn" title="Narrower" onclick="previewNarrower()">&#9664;</button>
+        <button type="button" class="preview-resize-btn" title="Wider" onclick="previewWider()">&#9654;</button>
+      </div>
+      <div id="previewRelatedBanner">&#128279; Related to current model</div>
+      <div id="previewEmpty">Select a task to preview.</div>
+      <div id="previewLoading">Loading&hellip;</div>
+      <div id="previewContent">
+        <div id="previewTitle"></div>
+        <div id="previewMeta"></div>
+        <div id="previewRelatedBadge">&#128279; Related</div>
+        <div id="previewFields"></div>
+        <div class="preview-section-label">Workflow Actions</div>
+        <div class="preview-actions-row" id="previewActions"><span class="preview-no-actions">No actions</span></div>
+        <textarea id="previewComment" placeholder="Workflow comment&hellip;" rows="2"></textarea>
+        <button type="button" class="btn btn-sm preview-open-btn" onclick="openDetailFromPreview()">Open full detail &rsaquo;</button>
+      </div>
+      <div id="previewBanner"></div>
+    </div>
+
+  </div><!-- /listViewContent -->
+
+  <!-- Bulk action bar (shown when 2+ tasks selected) -->
+  <div id="bulkBar">
+    <span id="bulkLabel">0 selected</span>
+    <select id="bulkTransition"><option value="">— Select transition —</option></select>
+    <input type="text" id="bulkComment" placeholder="Comment&hellip;">
+    <button type="button" class="btn btn-sm btn-primary" onclick="runBulkWorkflowTransition()">Apply</button>
+    <span id="bulkMessage"></span>
+    <span class="mw-spacer"></span>
+    <button type="button" class="btn btn-sm" onclick="clearTaskSelection()">Clear selection</button>
+  </div>
+
+</div><!-- /viewList -->
+
+
+<!-- =================================================================
+     VIEW: DETAIL
+     ================================================================= -->
+<div id="viewDetail">
+
+  <!-- Detail header bar: breadcrumb + utility controls + back -->
+  <div class="detail-header-bar">
+    <span id="detailBreadcrumb"></span>
+    <button type="button" class="btn btn-sm btn-primary" id="btnDetailOpenBrowser" onclick="openInBrowser()">Open in browser</button>
+    <button type="button" class="btn btn-sm" id="btnDetailOpenInFusion" style="display:none">Open in Fusion</button>
+    <button type="button" class="btn btn-sm" id="btnDetailRefresh" onclick="refreshTaskDetail()">&#8635; Refresh</button>
+    <button type="button" class="btn btn-sm" onclick="closeTaskDetail()">&#8592; Back</button>
+  </div>
+
+  <!-- Related to current model banner -->
+  <div id="detailRelatedBanner">&#128279; Related to current model</div>
+
+  <!-- Title + meta -->
+  <div class="detail-title-row">
+    <div id="detailTitle"></div>
+    <div id="detailMeta">
+      <span id="detailMetaText"></span>
+      <span id="detailRelatedBadge">&#128279; Related</span>
+    </div>
+  </div>
+
+  <!-- Workflow actions (separate labelled section, hidden when no transitions) -->
+  <div class="workflow-section" id="workflowSection" style="display:none;">
+    <div class="workflow-label">Workflow Actions</div>
+    <div class="transition-btns" id="transitionBtns"></div>
+    <div class="workflow-comment-row">
+      <textarea class="workflow-comment" id="detailComment" placeholder="Workflow comment&hellip;"></textarea>
+    </div>
+  </div>
+
+  <!-- Status banner -->
+  <div id="detailBanner"></div>
+
+  <!-- Field sections -->
+  <div id="detailDetails"></div>
+
+</div><!-- /viewDetail -->
+
+
+<!-- 3. Bridge -->
+<script src="../../../../web/core/bridge.js"></script>
+<!-- 4. Theme / settings gear -->
+<script src="../../../../web/core/theme.js"></script>
+<!-- 5. Page logic -->
+<script src="static/my_work.js"></script>
+
+</body>
+</html>

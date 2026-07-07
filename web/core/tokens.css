@@ -1,0 +1,137 @@
+/* ==========================================================================
+ * PLM Workspaces 2.0 — tokens.css
+ *
+ * Design tokens: colors (light + dark themes), spacing, type scale.
+ * Extracted from lib/html/plmStyles.css; all visual values live here.
+ * components.css imports this via the HTML load-order (tokens.css first).
+ *
+ * User preferences applied by theme.js:
+ *   body.pref-text-{sm,md,lg,xl}     → overrides --fs-* variables
+ *   body.theme-applied-light          → light theme (default :root values)
+ *   body.theme-applied-dark           → dark theme (remapped below)
+ * ========================================================================== */
+
+/* ---- Type-scale base tokens ---- */
+:root {
+    --fs-base: 13px;
+    --fs-xs:   11px;
+    --fs-sm:   12px;
+    --fs-md:   13px;
+    --fs-lg:   15px;
+    --fs-xl:   17px;
+
+    /* ---- Color tokens — light theme by default ---- */
+    --bg:            #f6f8fb;
+    --surface:       #ffffff;
+    --surface-alt:   #f2f4f8;
+    --surface-hover: #eaf4fa;
+    --row-alt:       #fafbfd;
+
+    --border:       #c9cfd8;
+    --border-soft:  #e1e5eb;
+    --divider:      #eaedf1;
+    --hairline:     #eff2f6;
+
+    --ink-primary:   #1a1f29;
+    --ink-secondary: #3a414b;
+    --ink-muted:     #6b7280;
+    --ink-label:     #4a5360;
+
+    --accent:        #0696d7;
+    --accent-hover:  #0579ad;
+    --accent-ink:    #0579ad;
+    --accent-soft:   #dcecf5;
+    --accent-border: #9ed1e8;
+    --accent-ring:   rgba(6, 150, 215, 0.22);
+
+    --danger:      #c62828;
+    --danger-soft: #fce8e8;
+    --success:     #2e7d32;
+    --success-soft:#e3f1e4;
+    --warn:        #b8700a;
+    --warn-soft:   #fff1d9;
+
+    /* ---- Shape ---- */
+    --radius-xs: 3px;
+    --radius-sm: 5px;
+    --radius:    8px;
+    --radius-lg: 12px;
+
+    /* ---- Shadows ---- */
+    --shadow-xs: 0 1px 2px rgba(15, 23, 42, 0.05);
+    --shadow-sm: 0 2px 6px rgba(15, 23, 42, 0.07);
+    --shadow-md: 0 6px 20px rgba(15, 23, 42, 0.10);
+
+    /* ---- Typography ---- */
+    --font: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, system-ui, sans-serif;
+
+    /* ---- Detail / form two-column grid ---- */
+    --label-col: 118px;
+    --row-gap:   10px;
+}
+
+/* ---- Text-size presets (explicit — no calc needed) ---- */
+body.pref-text-sm {
+    --fs-base: 11px; --fs-xs: 9px;  --fs-sm: 10px;
+    --fs-md: 11px;   --fs-lg: 13px; --fs-xl: 15px;
+}
+body.pref-text-md {
+    --fs-base: 13px; --fs-xs: 11px; --fs-sm: 12px;
+    --fs-md: 13px;   --fs-lg: 15px; --fs-xl: 17px;
+}
+body.pref-text-lg {
+    --fs-base: 15px; --fs-xs: 13px; --fs-sm: 14px;
+    --fs-md: 15px;   --fs-lg: 17px; --fs-xl: 19px;
+}
+body.pref-text-xl {
+    --fs-base: 17px; --fs-xs: 15px; --fs-sm: 16px;
+    --fs-md: 17px;   --fs-lg: 19px; --fs-xl: 22px;
+}
+
+/* ---- Dark theme — applied when body.theme-applied-dark ---- */
+body.theme-applied-dark {
+    --bg:            #0d1520;
+    --surface:       #1a2330;
+    --surface-alt:   #24313f;
+    --surface-hover: #2c3b4c;
+    --row-alt:       #222f3e;
+
+    --border:       #475668;
+    --border-soft:  #364355;
+    --divider:      #2c3a4a;
+    --hairline:     #24303f;
+
+    --ink-primary:   #eef3f9;
+    --ink-secondary: #cdd7e3;
+    --ink-muted:     #8a9bb0;
+    --ink-label:     #a8b8cc;
+
+    --accent:        #3bb5ed;
+    --accent-hover:  #0696d7;
+    --accent-ink:    #9fd5f0;
+    --accent-soft:   #0e3c57;
+    --accent-border: #2f6a91;
+    --accent-ring:   rgba(59, 181, 237, 0.32);
+
+    --danger:      #ff6b6b;
+    --danger-soft: #3a1d1f;
+    --success:     #7ac784;
+    --success-soft:#18321e;
+    --warn:        #ecae5c;
+    --warn-soft:   #3d2b13;
+
+    --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.5);
+    --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.55);
+    --shadow-md: 0 10px 28px rgba(0, 0, 0, 0.6);
+}
+
+/* Native UI affordances (scrollbars, form controls) */
+body.theme-applied-dark ::-webkit-scrollbar { width: 12px; height: 12px; }
+body.theme-applied-dark ::-webkit-scrollbar-track { background: var(--bg); }
+body.theme-applied-dark ::-webkit-scrollbar-thumb {
+    background: var(--border-soft); border-radius: 6px; border: 2px solid var(--bg);
+}
+body.theme-applied-dark ::-webkit-scrollbar-thumb:hover { background: var(--border); }
+body.theme-applied-dark input[type="checkbox"],
+body.theme-applied-dark input[type="radio"] { accent-color: var(--accent); }
+body.theme-applied-dark select option { background: var(--surface); color: var(--ink-primary); }
