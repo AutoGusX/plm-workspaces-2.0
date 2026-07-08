@@ -286,6 +286,12 @@ def workspace_fields(client, workspace_id):
         fid = m.group(1) if m else ''
         if not fid:
             continue
+        # derivedFieldSource is an object {__self__: '.../fields/{srcId}'}; extract the id.
+        derived_src = ''
+        dfs = f.get('derivedFieldSource')
+        if isinstance(dfs, dict):
+            dm = re.search(r'fields/([^/?]+)', dfs.get('__self__') or '')
+            derived_src = dm.group(1) if dm else ''
         fields.append({
             'id': fid,
             'name': f.get('name') or fid,
@@ -298,6 +304,13 @@ def workspace_fields(client, workspace_id):
             'picklist': f.get('picklist') or None,
             'fieldValidators': f.get('fieldValidators') or [],
             'displayOrder': f.get('displayOrder') or 0,
+            # Write-path metadata (mirrors the extension's CLONE_FIELD_RULES): these
+            # decide which fields are safe to send in a create/update body. isSystemField
+            # is NOT reliably on this endpoint — it comes from the item detail on edit.
+            'derived': bool(f.get('derived')),
+            'derivedFieldSource': derived_src,
+            'formulaField': bool(f.get('formulaField')),
+            'isSystemField': bool(f.get('isSystemField', False)),
         })
     return fields, None
 
@@ -362,6 +375,9 @@ def sections(client, workspace_id):
             'id': sec_id, 'link': self_ref, 'name': sec.get('name') or '',
             'displayOrder': sec.get('displayOrder') or 0, 'fields': fields,
             'matrices': sec.get('matrices') or [],
+            # Carried into the create body for classified workspaces (FM v3 needs the
+            # section's classificationId or the create is rejected / mis-classified).
+            'classificationId': sec.get('classificationId'),
         })
     return {'sections': out_sections, 'viewId': detected_view_id or 1}, None
 
@@ -457,13 +473,18 @@ def image_url(client, relative_link):
 
 
 def create_item(client, workspace_id, sections_payload):
-    """POST /items — create a new item. Returns (dict, error) with 'itemId' + 'data'."""
+    """POST /items — create a new item. Returns (dict, error) with 'itemId' + 'data'.
+
+    FM v3 returns 201 with an (often empty) body and the new item URL in the Location
+    header, so the id is read from Location first, then the body __self__ as a fallback.
+    """
     url = f'{client.base}/api/v3/workspaces/{workspace_id}/items'
     r = client._request('POST', url, body={'sections': sections_payload})
     if not r.ok:
         return None, ('unauthorized' if r.unauthorized else r.error)
-    data = r.data or {}
-    m = re.search(r'items/(\d+)', data.get('__self__') or '')
+    data = r.data if isinstance(r.data, dict) else {}
+    m = (re.search(r'items/(\d+)', getattr(r, 'location', '') or '')
+         or re.search(r'items/(\d+)', data.get('__self__') or ''))
     return {'itemId': m.group(1) if m else None, 'data': data}, None
 
 

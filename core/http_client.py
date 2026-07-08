@@ -25,15 +25,16 @@ class Result:
       raw_bytes    -- raw bytes when raw=True was requested (e.g. image/binary).
       content_type -- response Content-Type (lowercased, parameters stripped).
       etag         -- ETag response header (used for if-match concurrency), or ''.
+      location     -- Location response header (new-item URL on a 201 create), or ''.
       error        -- human-readable error message, or None when ok.
       unauthorized -- True when the server returned 401 (drives token refresh-retry).
     """
 
     __slots__ = ('ok', 'status', 'data', 'text', 'raw_bytes', 'content_type',
-                 'etag', 'error', 'unauthorized')
+                 'etag', 'location', 'error', 'unauthorized')
 
     def __init__(self, ok=False, status=None, data=None, text='', raw_bytes=None,
-                 content_type='', etag='', error=None, unauthorized=False):
+                 content_type='', etag='', location='', error=None, unauthorized=False):
         self.ok = ok
         self.status = status
         self.data = data
@@ -41,6 +42,7 @@ class Result:
         self.raw_bytes = raw_bytes
         self.content_type = content_type
         self.etag = etag
+        self.location = location
         self.error = error
         self.unauthorized = unauthorized
 
@@ -163,26 +165,27 @@ def request(method, url, *, bearer, user_id=None, tenant=None,
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             status = getattr(resp, 'status', None) or resp.getcode()
             etag = resp.headers.get('ETag') or resp.headers.get('etag') or ''
+            location = resp.headers.get('Location') or resp.headers.get('location') or ''
             resp_ct = (resp.headers.get('Content-Type') or '').split(';')[0].strip().lower()
             raw_bytes = resp.read()
 
             if raw:
                 return Result(ok=True, status=status, raw_bytes=raw_bytes,
-                              content_type=resp_ct, etag=etag)
+                              content_type=resp_ct, etag=etag, location=location)
 
             text = raw_bytes.decode('utf-8', errors='replace')
             if not text.strip():
                 # Empty body. Honour the documented "empty means []/{}" quirk when asked.
                 return Result(ok=True, status=status, data=empty_body_as, text=text,
-                              content_type=resp_ct, etag=etag)
+                              content_type=resp_ct, etag=etag, location=location)
             try:
                 parsed = json.loads(text)
             except (json.JSONDecodeError, ValueError):
                 # Non-JSON 2xx body — hand back the text so callers can decide.
                 return Result(ok=True, status=status, data=None, text=text,
-                              content_type=resp_ct, etag=etag)
+                              content_type=resp_ct, etag=etag, location=location)
             return Result(ok=True, status=status, data=parsed, text=text,
-                          content_type=resp_ct, etag=etag)
+                          content_type=resp_ct, etag=etag, location=location)
 
     except urllib.error.HTTPError as e:
         try:

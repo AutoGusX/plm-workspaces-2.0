@@ -130,7 +130,7 @@ and overrides `getItemDetail` to add workflow transitions and an LRU detail cach
 |---|---|---|
 | `getTableaus` | `{}` | `{success, tableaus:[{id, title, type}]}` |
 | `getTableauData` | `{tableauId, page, size}` | `{success, columns:[{id,typeTitle}], rows:[{itemId,workspaceId,fields}], total}` |
-| `getViewFields` | `{viewId?}` | `{success, fields:[{id,title,type,editability,visibility,picklist,fieldValidators,displayOrder}]}` |
+| `getViewFields` | `{viewId?}` | `{success, fields:[{id,title,type,editability,visibility,picklist,fieldValidators,displayOrder,derived,derivedFieldSource,formulaField,isSystemField}]}` |
 | `getWorkspaceSections` | `{}` | `{success, sections:[{name,link,fields:[{id,link}]}], viewId?}` |
 | `getLookupOptions` | `{lookupPath, limit?, offset?}` | `{success, items:[{link,title,version,deleted}]}` |
 
@@ -148,8 +148,29 @@ and overrides `getItemDetail` to add workflow transitions and an LRU detail cach
 
 | Action | Payload | Success response |
 |---|---|---|
-| `createItem` | `{sections:[…]}` | `{success, itemId}` |
-| `updateItem` | `{itemId, sections:[…], etag}` | `{success}` — also evicts the LRU cache entry |
+| `createItem` | `{mode:'create', fieldValues:{fieldId:value}, workspaceId?}` | `{success, itemId}` **or** `{success:false, missingFields:[label,…], error}` |
+| `updateItem` | `{mode:'edit', itemId, etag, fieldValues:{fieldId:value}, workspaceId?}` | `{success}` **or** `{success:false, missingFields:[label,…], error}` — also evicts the LRU cache entry |
+
+**`fieldValues`** is a flat map `{fieldId: rawValue}` of the fields JS wants to write. On **create** JS
+sends every field the user entered; on **edit** JS sends only the fields it detected as *changed* (the
+diff against the item's original values lives in JS). Raw value shapes as produced by the form widgets:
+text/paragraph/rich-text → string; numeric → string (Python coerces); date → `"YYYY-MM-DD"`; checkbox →
+bool; single-select / item-reference → `{link,title?,value?}`; multi-select → array of those. Draft-image
+fields are resolved to their `dataUrl` string by JS before sending.
+
+**Python is authoritative for the request-body shape.** The `createItem`/`updateItem` handlers gather field
+metadata server-side (`/workspaces/{ws}/fields` for editability/derived/derivedFieldSource/formulaField/
+validators; `/workspaces/{ws}/sections` for section membership + `classificationId` on create; the item
+detail for section membership + `isSystemField` + `classificationId` on edit) and call
+`services.item_payload.build_item_body` to produce the FM v3 `{sections:[{link, classificationId?,
+fields:[{__self__, value}]}]}` body. That normalizer: excludes `isSystemField` / `editability==NEVER` /
+`formulaField` (and `ON_CREATION`/`CREATE_ONLY` on edit); includes a derived field only when its
+`derivedFieldSource` is also being written; coerces each value by field type; emits **minimal**
+`{__self__, value}` per field (never `title`) with **workspace-scoped** links
+(`/api/v3/workspaces/{ws}/views/{v}/fields/{id}` and `/api/v3/workspaces/{ws}/sections/{sid}`) for both
+modes; and runs a **required pre-flight** — if a writable required field is blank it returns
+`{success:false, missingFields:[…]}` (friendly labels) **before** any POST/PATCH. `updateItem` uses the
+JS-supplied `etag` for the `If-Match` header (optimistic concurrency) and evicts the LRU detail cache.
 
 ### 7.4 Affected Items (Linked Items tab)
 

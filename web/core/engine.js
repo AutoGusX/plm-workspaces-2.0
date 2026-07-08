@@ -206,6 +206,23 @@
         return v === false || v === 'NEVER';
     }
 
+    // Turn a raw field system name (e.g. "SUPPLIER_LOCATION") into a friendly label
+    // ("Supplier Location") for the rare case a workspace field def is missing.
+    function _titleCaseId(id) {
+        return String(id || '').toLowerCase().replace(/_/g, ' ')
+            .replace(/\b\w/g, function (c) { return c.toUpperCase(); });
+    }
+
+    // Empty-aware value equality — decides whether an edited field changed from its
+    // original, so edit-mode only sends the diff (Python owns the write-body shape).
+    function _formValEqual(a, b) {
+        var na = (a === null || a === undefined || a === '' || (Array.isArray(a) && !a.length));
+        var nb = (b === null || b === undefined || b === '' || (Array.isArray(b) && !b.length));
+        if (na && nb) return true;
+        if (na !== nb) return false;
+        try { return JSON.stringify(a) === JSON.stringify(b); } catch (e) { return a === b; }
+    }
+
     function isCadWorkspace(wsId) {
         return wsId === COMPONENTS_WS_ID || wsId === DRAWINGS_WS_ID;
     }
@@ -1800,7 +1817,9 @@
                 var selfRef = f.__self__ || f.link || '';
                 var m = selfRef.match(/fields\/([^/?]+)/);
                 var fid = m ? m[1] : '';
-                return {id: fid, title: fid, __self__: selfRef};
+                // Carry the item field's own title/type so renderForm's synthetic-def
+                // fallback shows a real label + widget when a workspace def is absent.
+                return {id: fid, title: f.title || fid, ftype: f.type || null, __self__: selfRef};
             }).filter(function (f) { return !!f.id; });
             return {name: sec.name || '', link: secSelf, fields: fields};
         });
@@ -1858,7 +1877,9 @@
                 if (!sf.id) return;
                 var def = formFieldDefs[sf.id];
                 if (def && _fieldIsHidden(def)) return;
-                if (!def) def = {id: sf.id, title: sf.title || sf.id, type: {title: 'Single Line Text'}, editability: 'ALWAYS', visibility: true, picklist: null, fieldValidators: []};
+                if (!def) def = {id: sf.id, title: sf.title || _titleCaseId(sf.id),
+                                 type: sf.ftype || {title: 'Single Line Text'},
+                                 editability: 'ALWAYS', visibility: true, picklist: null, fieldValidators: []};
                 var fieldEl = buildFormField(sf.id, def);
                 if (fieldEl) block.appendChild(fieldEl);
             });
@@ -1891,25 +1912,50 @@
             if (customEl) { wrap.appendChild(customEl); return wrap; }
         }
         var input = null;
-        if (fieldId === 'SHARED_ITEMS' || typeTitle === 'Multiple Selection') {
+        // Match on a normalized (lowercased) type title so minor FM naming variants
+        // ("Pick List" vs "Single Selection", "Check Box" vs "Boolean") don't silently
+        // degrade to a plain text box. Value coercion to the FM wire shape happens in
+        // Python (services/item_payload.py) — the widgets store raw values.
+        var tt = typeTitle.toLowerCase();
+        var hasPicklist = !!def.picklist;
+        if (fieldId === 'SHARED_ITEMS' || tt.indexOf('multiple selection') !== -1
+                || tt.indexOf('multi-select') !== -1 || tt.indexOf('multiselect') !== -1) {
             input = buildMultiSelectField(fieldId, def, currentVal);
-        } else if (typeTitle === 'Single Selection' || typeTitle === 'Radio Button') {
+        } else if (tt.indexOf('single selection') !== -1 || tt.indexOf('radio') !== -1
+                || tt.indexOf('pick list') !== -1 || tt.indexOf('picklist') !== -1
+                || tt.indexOf('dropdown') !== -1 || (hasPicklist && tt.indexOf('multi') === -1)) {
+            // Single-select, radio, pick list, and single item-reference fields — any field
+            // backed by a lookup — share the one option-loading select widget.
             input = buildSingleSelectField(fieldId, def, currentVal);
-        } else if (typeTitle === 'Paragraph') {
+        } else if (tt.indexOf('bool') !== -1 || tt.indexOf('checkbox') !== -1 || tt.indexOf('check box') !== -1) {
+            input = document.createElement('input');
+            input.type = 'checkbox'; input.className = 'form-checkbox';
+            input.checked = (currentVal === true || currentVal === 'true' || currentVal === 1 || currentVal === '1');
+            (function (fid, el) { el.onchange = function () { formValues[fid] = el.checked; }; })(fieldId, input);
+        } else if (tt.indexOf('paragraph') !== -1 || tt.indexOf('rich') !== -1 || tt.indexOf('html') !== -1
+                || tt.indexOf('wysiwyg') !== -1 || tt.indexOf('multi line') !== -1 || tt.indexOf('multiline') !== -1) {
             input = document.createElement('textarea');
             input.className = 'form-textarea form-input';
-            input.value = typeof currentVal === 'string' ? currentVal : '';
+            // Show HTML source for rich-text fields (entities decoded) so the user edits readable markup.
+            input.value = typeof currentVal === 'string'
+                ? (hasHtmlContent(currentVal) ? decodeHtmlEntities(currentVal) : currentVal) : '';
             (function (fid, el) { el.oninput = function () { formValues[fid] = el.value || null; }; })(fieldId, input);
-        } else if (typeTitle === 'Date') {
+        } else if (tt.indexOf('date') !== -1) {
             input = document.createElement('input');
             input.type = 'date'; input.className = 'form-input';
-            if (currentVal) input.value = currentVal.substring(0, 10);
+            if (currentVal) input.value = String(currentVal).substring(0, 10);
             (function (fid, el) { el.onchange = function () { formValues[fid] = el.value || null; }; })(fieldId, input);
-        } else if (typeTitle === 'Integer') {
+        } else if (tt.indexOf('integer') !== -1) {
             input = document.createElement('input');
             input.type = 'number'; input.step = '1'; input.className = 'form-input';
             input.value = currentVal !== null && currentVal !== undefined ? currentVal : '';
-            (function (fid, el) { el.oninput = function () { formValues[fid] = el.value !== '' ? parseInt(el.value, 10) : null; }; })(fieldId, input);
+            (function (fid, el) { el.oninput = function () { formValues[fid] = el.value !== '' ? el.value : null; }; })(fieldId, input);
+        } else if (tt.indexOf('number') !== -1 || tt.indexOf('decimal') !== -1 || tt.indexOf('money') !== -1
+                || tt.indexOf('float') !== -1 || tt.indexOf('currency') !== -1 || tt.indexOf('numeric') !== -1) {
+            input = document.createElement('input');
+            input.type = 'number'; input.step = 'any'; input.className = 'form-input';
+            input.value = currentVal !== null && currentVal !== undefined ? currentVal : '';
+            (function (fid, el) { el.oninput = function () { formValues[fid] = el.value !== '' ? el.value : null; }; })(fieldId, input);
         } else {
             input = document.createElement('input');
             input.type = 'text'; input.className = 'form-input';
@@ -2069,57 +2115,42 @@
         }
         if (btnSave) btnSave.disabled = true;
         if (msgEl) { msgEl.textContent = 'Saving…'; msgEl.style.color = '#666'; }
-        var viewId = _detectedViewId || 1;
-        var wsBase      = '/api/v3/workspaces/' + currentWorkspaceId;
-        var itemViewBase = wsBase + '/items/' + currentItemId + '/views/' + viewId;
-        var sections = formSections.map(function (sec) {
-            var secLink = sec.link || '';
-            if (formMode === 'edit' && secLink && secLink.indexOf('/items/') === -1) {
-                var secIdM = secLink.match(/sections\/(\d+)/);
-                secLink = secIdM ? (itemViewBase + '/sections/' + secIdM[1]) : '';
-            }
-            var fields = (sec.fields || []).map(function (sf) {
+        // Collect the raw field values to write. Python (services/item_payload.py) owns the
+        // FM v3 body shape — exclusions, coercion, links, required pre-flight. On create we
+        // send every non-empty entered field; on edit only the fields that changed (the diff
+        // against the item's original values lives here in the frontend).
+        var fieldValues = {};
+        formSections.forEach(function (sec) {
+            (sec.fields || []).forEach(function (sf) {
+                if (!sf.id) return;
                 var def = formFieldDefs[sf.id];
-                if (!def) return null;
-                if (_fieldIsHidden(def)) return null;
-                var ed = def.editability || 'ALWAYS';
-                if (ed === 'NEVER') return null;
-                if ((ed === 'ON_CREATION' || ed === 'CREATE_ONLY') && formMode === 'edit') return null;
-                var fieldSelf;
-                if (formMode === 'create') {
-                    fieldSelf = sf.link || def.__self__ || '';
-                } else {
-                    fieldSelf = (sf.link && sf.link.indexOf('/items/') !== -1) ? sf.link : (itemViewBase + '/fields/' + sf.id);
-                }
+                if (def && _fieldIsHidden(def)) return;
                 var val = formValues[sf.id] !== undefined ? formValues[sf.id] : null;
-                if (formMode === 'edit') {
-                    var origVal = _originalFormValues[sf.id] !== undefined ? _originalFormValues[sf.id] : null;
-                    var isNull  = val === null || val === undefined || (Array.isArray(val) && !val.length);
-                    var wasNull = origVal === null || origVal === undefined || (Array.isArray(origVal) && !origVal.length);
-                    if (isNull && wasNull) return null;
-                }
                 if (val && typeof val === 'object' && val.isDraft && val.dataUrl) val = val.dataUrl;
-                return {'__self__': fieldSelf, 'title': def.title || sf.id, 'value': val};
-            }).filter(Boolean);
-            if (!fields.length) return null;
-            var sec_out = {fields: fields};
-            if (secLink) sec_out.link = secLink;
-            return sec_out;
-        }).filter(Boolean).filter(function (s) { return s.fields.length > 0; });
+                if (formMode === 'create') {
+                    if (val === null || val === undefined || val === '' || (Array.isArray(val) && !val.length)) return;
+                    fieldValues[sf.id] = val;
+                } else {
+                    var origVal = _originalFormValues[sf.id] !== undefined ? _originalFormValues[sf.id] : null;
+                    if (_formValEqual(val, origVal)) return;   // unchanged — don't send
+                    fieldValues[sf.id] = val;
+                }
+            });
+        });
 
-        if (!sections.length) {
+        if (formMode === 'edit' && !Object.keys(fieldValues).length) {
             if (btnSave) btnSave.disabled = false;
-            if (msgEl) { msgEl.textContent = 'Nothing to save (all fields are read-only or unchanged).'; msgEl.style.color = '#c62828'; }
+            if (msgEl) { msgEl.textContent = 'Nothing to save — no changes.'; msgEl.style.color = '#c62828'; }
             return;
         }
         var action, payload;
         var wsPayload = _scopedWsPayload();
         if (formMode === 'create') {
             action = 'createItem';
-            payload = Object.assign({sections: sections}, wsPayload);
+            payload = Object.assign({mode: 'create', fieldValues: fieldValues}, wsPayload);
         } else {
             action = 'updateItem';
-            payload = Object.assign({itemId: currentItemId, sections: sections, etag: currentItemETag}, wsPayload);
+            payload = Object.assign({mode: 'edit', itemId: currentItemId, etag: currentItemETag, fieldValues: fieldValues}, wsPayload);
         }
         send(action, payload).then(function (r) {
             if (btnSave) btnSave.disabled = false;

@@ -1,7 +1,7 @@
 # PLM Workspaces 2.0 — Backlog
 
 > Living document. Updated at the end of every work session.
-> Last updated: 2026-07-01
+> Last updated: 2026-07-08
 
 ---
 
@@ -41,6 +41,24 @@
 ## Known Issues / Deferred Fixes
 
 ### High priority (deferred from active work)
+
+**[FIXED — verified live] Universal create/edit record body shape**
+Create/edit was failing (messy forms + rejected/incomplete API bodies). Reworked so Python
+owns the FM v3 request-body shape, mirroring the Chrome extension's validated CLONE_FIELD_RULES.
+New `services/item_payload.py` normalizer: excludes system/`NEVER`/formula fields, applies the
+derived-field dependency rule, coerces values per type, and runs a required pre-flight
+(`missingFields`). `createItem`/`updateItem` now take a flat `fieldValues` map (contract §7.3);
+`workspace_fields` returns `derived`/`derivedFieldSource`/`formulaField`/`isSystemField`;
+`sections` returns `classificationId`. Frontend `buildFormField` gained checkbox / float-money /
+rich-text / single item-reference widgets and an edit-mode label fix.
+Two bugs found only via live testing (FAA Sandbox autodesk8937): (1) edit needs the item's own
+**item-scoped** section/field links verbatim — a reconstructed workspace-scoped section link is
+rejected ("Could not find section N in workspace W"); create uses constructed workspace/view-scoped
+links. (2) create's new itemId comes from the **`Location` response header** (201 empty body), now
+captured via `Result.location`. Verified: create → item 17789, edit → 2xx (persisted), date write
+`YYYY-MM-DD` accepted. Known limit: required *dropdown-selection* fields use a `dropDownSelection`
+validator (not `required`) so client pre-flight won't pre-warn — server rejects with a clear message.
+Verify probe: `docs/dev/api_probe_create.py`.
 
 **[FIXED] New record creation flow — itemId null fallback**
 After `createItem` succeeds, `d.itemId || currentItemId` was falling back to the last
