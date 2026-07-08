@@ -179,6 +179,8 @@ class PaletteCommand:
         from . import panels
         if self.panel == 'cam':
             panels.add_command_to_cam_manage_panel(self._ui, cmd_def)
+        elif self.panel == 'electronics':
+            panels.add_command_to_electronics_panel(self._ui, cmd_def)
         else:
             panels.add_command_to_plm_panels(self._ui, cmd_def)
 
@@ -186,6 +188,8 @@ class PaletteCommand:
         from . import panels
         if self.panel == 'cam':
             panels.remove_command_from_cam_manage_panel(self._ui, self.command_id)
+        elif self.panel == 'electronics':
+            panels.remove_command_from_electronics_panel(self._ui, self.command_id)
         else:
             panels.remove_command_from_plm_panels(self._ui, self.command_id)
 

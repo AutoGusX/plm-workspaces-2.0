@@ -307,6 +307,48 @@ Change Management palette.
   before writing to the DOM, so a `getRecordsEnrichment` response that arrives after
   a scope switch is dropped silently.
 
+## 9.3 PLM Charts (dashboard) — `commands/plm_charts/`
+
+Custom `PaletteCommand` on the PLM panel (modeled on My Work; own frontend, not engine.js).
+Both actions are `async_=True` (HTTP over the legacy REST v1 reporting API, `send_tenant=True`).
+
+| Action | Payload | Success response |
+|---|---|---|
+| `getDashboards` | `{}` | `{success, reports:[{id, position, link}]}` (ordered by position) |
+| `getChart` | `{id}` | `{success, chart}` |
+
+`chart` is normalized server-side (`services/reports.py`) into a render-ready shape:
+```
+{ id, name, description, type,           // COLUMN|BAR|STACKEDCOLUMN|LINE|AREA|MSAREA|PIE|DOUGHNUT|…
+  title, xLabel, yLabel, seriesLabel,
+  categories:[<x label>,…],
+  series:[ {name:<series label>, points:[ {x:<label>, y:<number>} ]} ],
+  hasData:<bool> }
+```
+Raw source: `GET /api/rest/v1/reports/dashboard` (`dashboardReportList.list`) and
+`GET /api/rest/v1/reports/{id}/chart.json` (`reportDefinition.reportChart` + `reportResult`
++ `xAxisColumn`/`yAxisColumn`). The series column is the `columnKey` that is neither x nor y
+(stacked/multi-series charts). Rendering is inline SVG in `resources/html/static/plm_charts.js`.
+
+## 9.4 Export Electronics BOM (v1) — `commands/export_electronics_bom/`
+
+Custom `PaletteCommand` on the Electronics environment panel (`panel='electronics'`,
+`requires_auth=False` for v1). One **SYNC** action (reads `adsk.electron` on the main thread —
+must NOT be async).
+
+| Action | Payload | Success response |
+|---|---|---|
+| `getElectronicsBom` | `{}` | `{success, design, rows, partCount, skipped, warnings}` |
+
+`rows` are grouped + FM-export-ready, one per unique `(value, footprint, MPN, manufacturer)`:
+```
+{ mpn, manufacturer, value, footprint, quantity, referenceDesignators:[…], raw:{…} }
+```
+Extraction (`services/electronics_bom.py`) reads `Schematic.parts` (or `board.linkedSchematic`),
+skips parts with no device package / no linked 3D-footprint name / not-populated-for-variant,
+reads MPN + MF from `Part.attributes` (case-insensitive). v1 = read & display + export-prep
+preview only; no FM writes.
+
 ## 10. Auth gating (uniform, base-owned)
 
 When a command with `requires_auth = True` is invoked and there is no valid token,

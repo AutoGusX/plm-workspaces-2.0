@@ -14,6 +14,7 @@ from . import items as _items
 from . import workflow as _workflow
 from . import attachments as _attachments
 from . import search as _search
+from . import reports as _reports
 from ..core import auth
 from ..core import http_client
 
@@ -132,6 +133,17 @@ class FmClient:
 
     def run_transition(self, ws, item, transition_id, current_step, comments=''):
         return _workflow.run_transition(self, ws, item, transition_id, current_step, comments)
+
+    # ------------------------------------------------------------------
+    # Reporting / dashboard charts (legacy REST v1)
+    # ------------------------------------------------------------------
+    def report_dashboard(self):
+        """GET /api/rest/v1/reports/dashboard — dashboard report list (id/position/link)."""
+        return _reports.dashboard(self)
+
+    def report_chart(self, report_id):
+        """GET /api/rest/v1/reports/{id}/chart.json — normalized chart (type + series)."""
+        return _reports.chart(self, report_id)
 
     # ------------------------------------------------------------------
     # Tabs / affected items / permissions

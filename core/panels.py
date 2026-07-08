@@ -166,6 +166,92 @@ def remove_command_from_cam_manage_panel(ui, cmd_id):
             pass
 
 
+def _electronics_workspaces(ui):
+    """Yield resolvable Electronics environment workspaces (PCB / schematic)."""
+    seen = set()
+    for ws_id in getattr(config, 'ELECTRONICS_WORKSPACE_ID_CANDIDATES', []):
+        if not ws_id or ws_id in seen:
+            continue
+        seen.add(ws_id)
+        ws = ui.workspaces.itemById(ws_id)
+        if ws:
+            yield ws
+
+
+def _electronics_panel(ws, create=True):
+    """Return (get-or-create) our Electronics panel on the workspace's best tab."""
+    tab = get_manage_tab(ws)
+    if not tab:
+        try:
+            tabs = ws.toolbarTabs
+            # Prefer a Utilities/Tools tab; else the first tab.
+            for i in range(tabs.count):
+                t = tabs.item(i)
+                nm = (t.name or '').upper() if t else ''
+                if t and ('UTIL' in nm or 'TOOL' in nm or 'MANAGE' in nm):
+                    tab = t
+                    break
+            if not tab and tabs.count:
+                tab = tabs.item(0)
+        except Exception:
+            tab = None
+    if not tab:
+        return None
+    panel = tab.toolbarPanels.itemById(config.ELECTRONICS_PANEL_ID)
+    if not panel and create:
+        try:
+            panel = tab.toolbarPanels.add(config.ELECTRONICS_PANEL_ID, 'PLM')
+        except Exception:
+            panel = None
+    return panel
+
+
+def add_command_to_electronics_panel(ui, cmd_def, is_promoted=True):
+    """Add cmd_def to our panel in every resolvable Electronics environment.
+
+    The Electronics environment has no PLM-native panel, so we create our own
+    (ELECTRONICS_PANEL_ID) the same way the Design/Drawing PLM panel is created.
+    Returns True if added to at least one environment.
+    """
+    added = False
+    for ws in _electronics_workspaces(ui):
+        panel = _electronics_panel(ws, create=True)
+        if not panel:
+            continue
+        try:
+            ctrl = panel.controls.addCommand(cmd_def, '', False)
+        except Exception:
+            try:
+                ctrl = panel.controls.addCommand(cmd_def, None, False)
+            except Exception:
+                continue
+        try:
+            ctrl.isPromoted = is_promoted
+        except Exception:
+            pass
+        added = True
+    return added
+
+
+def remove_command_from_electronics_panel(ui, cmd_id):
+    """Remove a button by cmd_id from our Electronics panels; delete empty panels."""
+    for ws in _electronics_workspaces(ui):
+        panel = _electronics_panel(ws, create=False)
+        if not panel:
+            continue
+        ctrl = panel.controls.itemById(cmd_id)
+        if ctrl:
+            try:
+                ctrl.deleteMe()
+            except Exception:
+                pass
+        try:
+            if panel.controls.count == 0:
+                panel.deleteMe()
+        except Exception:
+            pass
+
+
 def sync_plm_panel_buttons(app):
     """Add/remove PLM panel buttons by entitlement across all configured workspaces.
 
@@ -197,6 +283,10 @@ def sync_plm_panel_buttons(app):
 
             beside_id = config.FALLBACK_COMMAND_BESIDE_ID if used_fallback else ''
             for command_key in order_to_add:
+                # Skip commands that live on a non-PLM panel (CAM / Electronics) so their
+                # button never leaks onto the Design/Drawing PLM panel via this sync.
+                if command_key in getattr(config, 'NON_PLM_PANEL_COMMANDS', set()):
+                    continue
                 cmd_id = config.COMMAND_IDS.get(command_key)
                 if not cmd_id:
                     continue

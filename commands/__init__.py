@@ -31,6 +31,8 @@ from .export_gcode.command import ExportGcodeCommand
 from .export_pdf.command import ExportPdfCommand
 from .export_to_plm.command import ExportToPlmCommand
 from .export_dxf.command import ExportDxfCommand
+from .plm_charts.command import PlmChartsCommand
+from .export_electronics_bom.command import ExportElectronicsBomCommand
 
 # Instantiate the singletons that back each command.
 # Order matters: the login command has no panel button; the remaining commands
@@ -48,6 +50,8 @@ _commands = [
     ExportPdfCommand(),
     ExportDxfCommand(),
     ExportToPlmCommand(),
+    PlmChartsCommand(),
+    ExportElectronicsBomCommand(),
 ]
 
 # The shared OAuth custom event, registered once at start().

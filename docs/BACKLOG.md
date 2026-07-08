@@ -166,7 +166,22 @@ Two-phase delivery (same pattern as Export to PLM):
 5. **Variant model** — does the export expose variants; how are they keyed
 6. **Parent item identity** — how a design maps to its parent PCBA item across re-exports (stable design URN?)
 
-Status: **not started** — blocked on open items 1–6 above. Phase 1 diagnostic can begin without items 2–6.
+Status: **Phase 1 built (2026-07-08) — needs in-Fusion smoke test.** `commands/export_electronics_bom/`
+extracts the active schematic's BOM via `adsk.electron` (`services/electronics_bom.py`), groups by
+(value, footprint, MPN, manufacturer), and displays the table + an FM-export-ready JSON payload — no
+FM writes yet. Palette on the Electronics environment panel. See `docs/PHASE4_CHARTS_AND_ELECTRONICS_BOM.md`.
+Phase 2 (resolve/preview/push to FM) still blocked on open items 1–6 above. Confirm the exact
+Electronics environment/panel ids in Fusion (`config.ELECTRONICS_WORKSPACE_ID_CANDIDATES`).
+
+---
+
+**[BUILT 2026-07-08] PLM Charts dashboard** (`commands/plm_charts/`)
+Renders the tenant's Fusion Manage report dashboard as inline-SVG charts inside a PLM-panel palette.
+`services/reports.py` calls `GET /api/rest/v1/reports/dashboard` + `/reports/{id}/chart.json`
+(legacy REST v1, `X-Tenant`) and normalizes each report to a render-ready {type, categories, series}
+shape; `plm_charts.js` draws COLUMN/BAR/STACKEDCOLUMN/LINE/AREA/PIE/DOUGHNUT with no chart lib.
+Normalization verified offline against live API captures; SVG visuals need an in-Fusion check.
+Status: **built — needs in-Fusion smoke test.**
 
 ---
 

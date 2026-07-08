@@ -5,7 +5,7 @@
 	"description":	{
 		"":	"PLM Workspaces 2.0 — clean rewrite. Modules for each workspace in Fusion Manage."
 	},
-	"version":	"2.1.0",
+	"version":	"2.2.0",
 	"runOnStartup":	false,
 	"supportedOS":	"windows|mac",
 	"editEnabled":	true,

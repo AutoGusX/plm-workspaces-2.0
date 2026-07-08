@@ -32,8 +32,24 @@ CAM_UTILITIES_TAB_ID = 'UtilitiesTab'
 CAM_MANAGE_PANEL_ID = 'CAMManagePanel'              # Fusion-native; never created/deleted by us
 MANAGE_TAB_ID = 'ManageTab'
 
+# Electronics environment (PCB layout + schematic) — hosts the Export Electronics BOM
+# command. These environment ids are candidates from the Fusion Electronics preview;
+# confirm the exact ids in-Fusion (the panel helper tolerates whichever resolves).
+ELECTRONICS_PCB_WORKSPACE_ID = 'FusionElectronicsPcbEnvironment'
+ELECTRONICS_SCHEMATIC_WORKSPACE_ID = 'FusionElectronicsSchematicEnvironment'
+# Extra candidate ids seen across Fusion Electronics builds (tried in order).
+ELECTRONICS_WORKSPACE_ID_CANDIDATES = [
+    'FusionElectronicsPcbEnvironment',
+    'FusionElectronicsSchematicEnvironment',
+    'ElectronicsPcbEnvironment',
+    'ElectronicsSchematicEnvironment',
+    'FusionElectronicsEnvironment',
+]
+
 # Our own panel on the Manage tab (created on start, removed on stop) — V2-suffixed id.
 PLM_WORKSPACES_PANEL_ID = f'{COMPANY_NAME}_{ADDIN_NAME}_PLMWorkspacesPanel_V2'
+# Our own panel in the Electronics environment(s).
+ELECTRONICS_PANEL_ID = f'{COMPANY_NAME}_{ADDIN_NAME}_ElectronicsPanel_V2'
 
 # Fallback when the Manage tab is not found (e.g. some locales).
 FALLBACK_PANEL_ID = 'SolidScriptsAddinsPanel'
@@ -55,6 +71,8 @@ PALETTE_ID_EXPORT_PDF = f'{COMPANY_NAME}_{ADDIN_NAME}_ExportPdfToPlm_V2'
 PALETTE_ID_EXPORT_GCODE = f'{COMPANY_NAME}_{ADDIN_NAME}_ExportGcodeToPlm_V2'
 PALETTE_ID_EXPORT_DXF    = f'{COMPANY_NAME}_{ADDIN_NAME}_ExportDxfToPlm_V2'
 PALETTE_ID_EXPORT_TO_PLM = f'{COMPANY_NAME}_{ADDIN_NAME}_ExportToPlm_V2'
+PALETTE_ID_PLM_CHARTS = f'{COMPANY_NAME}_{ADDIN_NAME}_PlmCharts_V2'
+PALETTE_ID_EXPORT_ELECTRONICS_BOM = f'{COMPANY_NAME}_{ADDIN_NAME}_ExportElectronicsBom_V2'
 
 # ---------------------------------------------------------------------------
 # Command definition IDs (panel buttons) — all V2-suffixed. Keyed by capability.
@@ -70,7 +88,13 @@ COMMAND_IDS = {
     'exportGcodeToPlm': f'{COMPANY_NAME}_{ADDIN_NAME}_ExportGcodeToPlm_V2',
     'exportDxfToPlm':  f'{COMPANY_NAME}_{ADDIN_NAME}_ExportDxfToPlm_V2',
     'exportToPlm':     f'{COMPANY_NAME}_{ADDIN_NAME}_ExportToPlm_V2',
+    'plmCharts':       f'{COMPANY_NAME}_{ADDIN_NAME}_PlmCharts_V2',
+    'exportElectronicsBom': f'{COMPANY_NAME}_{ADDIN_NAME}_ExportElectronicsBom_V2',
 }
+
+# Commands that live on a NON-PLM panel (CAM Manage / Electronics) — excluded from the
+# PLM panel entitlement sync so their button never leaks onto the Design/Drawing panel.
+NON_PLM_PANEL_COMMANDS = {'exportGcodeToPlm', 'exportElectronicsBom'}
 
 # ---------------------------------------------------------------------------
 # OAuth / PKCE (APS). The client id is REUSED verbatim from the old config so
