@@ -180,12 +180,29 @@ class WorkspaceCommand(PaletteCommand):
         ws = self._ws_from(data)
         if not ws:
             return {'success': False, 'error': 'Workspace not resolved.'}
-        result, fetch_err = self._client(ctx).sections(ws)
+        client = self._client(ctx)
+        result, fetch_err = client.sections(ws)
         if fetch_err:
             return _api_err(fetch_err)
+        sections = result.get('sections', [])
+        # /sections gives section order + titles but NO field membership. Borrow ordered
+        # membership from a reference item so the create form groups fields into the right
+        # sections, in the right order (displayOrder is unreliable — many fields share it).
+        if sections and not any(s.get('fields') for s in sections):
+            ref_list, _rerr = client.items_list(ws, 0, 1)
+            ref_items = (ref_list or {}).get('items') if isinstance(ref_list, dict) else None
+            if ref_items:
+                ref_item, _tag, _rerr2 = client.item_detail(ws, ref_items[0].get('itemId'))
+                if ref_item:
+                    membership = {m['id']: m for m in
+                                  _payload.sections_from_item(ref_item, ws, for_create=True)}
+                    for sec in sections:
+                        m = membership.get(str(sec.get('id')))
+                        if m:
+                            sec['fields'] = [{'id': fid} for fid in m['field_ids']]
         return {
             'success': True,
-            'sections': result.get('sections', []),
+            'sections': sections,
             'viewId': result.get('viewId', 1),
         }
 

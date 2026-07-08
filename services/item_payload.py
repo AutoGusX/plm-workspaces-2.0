@@ -47,7 +47,9 @@ def sections_from_ws(sections_result, workspace_id):
             continue
         out.append({
             'id': sid,
+            'title': sec.get('name') or sec.get('title') or '',
             'classificationId': sec.get('classificationId'),
+            'locked': False,  # create targets a new item's initial state — no section locks
             # Workspace-scoped section link (FM accepts this form on create).
             'link': sec.get('link') or f'/api/v3/workspaces/{workspace_id}/sections/{sid}',
             'field_ids': [f.get('id') for f in (sec.get('fields') or []) if f.get('id')],
@@ -88,9 +90,12 @@ def sections_from_item(item, workspace_id=None, for_create=False):
         if for_create:
             link = f'/api/v3/workspaces/{workspace_id}/sections/{sid}'
             field_links = {}  # create builds view-scoped field selfs itself
+            locked = False    # new item starts in the initial state, not this item's state
         else:
             link = raw_link
-        out.append({'id': sid, 'classificationId': sec.get('classificationId'),
+            locked = bool(sec.get('sectionLocked'))  # locked in THIS item's workflow state
+        out.append({'id': sid, 'title': sec.get('title') or sec.get('name') or '',
+                    'classificationId': sec.get('classificationId'), 'locked': locked,
                     'link': link, 'field_ids': field_ids, 'field_links': field_links})
     return out
 
@@ -256,6 +261,11 @@ def build_item_body(mode, field_values, fields_meta, section_struct,
     for fid, raw in field_values.items():
         meta = fields_meta.get(fid)
         if not meta or meta.get('isSystemField'):
+            continue
+        # A section locked in the item's current workflow state rejects ALL its fields
+        # (FM: section.field.invalidValue) regardless of the field's own editability.
+        sec = fid_to_section.get(fid)
+        if mode == 'edit' and sec and sec.get('locked'):
             continue
         if not _is_writable(meta, mode):
             continue  # NEVER / formula / create-only-on-edit -> server owns it

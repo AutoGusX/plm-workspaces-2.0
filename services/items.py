@@ -372,7 +372,9 @@ def sections(client, workspace_id):
                         fields.append({'id': fid, 'link': flink,
                                        'title': mf.get('title') or fid, 'type': mf.get('type') or ''})
         out_sections.append({
-            'id': sec_id, 'link': self_ref, 'name': sec.get('name') or '',
+            # The /sections endpoint names the section in 'title' (not 'name').
+            'id': sec_id, 'link': self_ref,
+            'name': sec.get('title') or sec.get('name') or '',
             'displayOrder': sec.get('displayOrder') or 0, 'fields': fields,
             'matrices': sec.get('matrices') or [],
             # Carried into the create body for classified workspaces (FM v3 needs the

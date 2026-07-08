@@ -1821,33 +1821,44 @@
                 // fallback shows a real label + widget when a workspace def is absent.
                 return {id: fid, title: f.title || fid, ftype: f.type || null, __self__: selfRef};
             }).filter(function (f) { return !!f.id; });
-            return {name: sec.name || '', link: secSelf, fields: fields};
+            // Item sections name themselves in 'title'; sectionLocked marks a section that
+            // the current workflow state forbids editing (FM rejects writes to its fields).
+            return {name: sec.title || sec.name || '', link: secSelf,
+                    locked: !!sec.sectionLocked, fields: fields};
         });
     }
 
     function _buildCreateFormSections(wsSections, fieldDefs) {
-        var allFields = Object.keys(fieldDefs).map(function (id) { return fieldDefs[id]; })
-            .filter(function (d) { return d.id && !_fieldIsHidden(d); })
-            .sort(function (a, b) { return (a.displayOrder || 0) - (b.displayOrder || 0); });
+        // Preserve the workspace's real section order AND each section's field order (both
+        // come from getWorkspaceSections, which sources membership from a reference item).
+        // displayOrder is NOT a reliable tiebreaker (many fields share the same value).
         if (!wsSections.length) {
-            return [{name: 'Details', link: '', fields: allFields.map(function (d) { return {id: d.id, link: ''}; })}];
+            var all = Object.keys(fieldDefs).map(function (id) { return fieldDefs[id]; })
+                .filter(function (d) { return d.id && !_fieldIsHidden(d); })
+                .sort(function (a, b) { return (a.displayOrder || 0) - (b.displayOrder || 0); });
+            return [{name: 'Details', link: '', fields: all.map(function (d) { return {id: d.id, link: ''}; })}];
         }
-        var fieldToSecIdx = {};
-        wsSections.forEach(function (sec, idx) {
-            (sec.fields || []).forEach(function (sf) { if (sf.id) fieldToSecIdx[sf.id] = idx; });
+        var assigned = {};
+        var buckets = wsSections.map(function (sec) {
+            var fields = (sec.fields || []).map(function (sf) {
+                if (!sf.id) return null;
+                var def = fieldDefs[sf.id];
+                if (def && _fieldIsHidden(def)) return null;
+                assigned[sf.id] = true;
+                return {id: sf.id, link: sf.link || ''};
+            }).filter(Boolean);
+            return {name: sec.name || 'Section', link: sec.link || '', fields: fields};
         });
-        var buckets = wsSections.map(function (sec) { return {name: sec.name || 'Section', link: sec.link || '', fields: []}; });
-        var unassigned = [];
-        allFields.forEach(function (d) {
-            var idx = fieldToSecIdx[d.id];
-            if (idx !== undefined && buckets[idx]) {
-                var wsField = (wsSections[idx].fields || []).filter(function (sf) { return sf.id === d.id; })[0];
-                buckets[idx].fields.push({id: d.id, link: wsField ? (wsField.link || '') : ''});
-            } else {
-                unassigned.push({id: d.id, link: ''});
-            }
-        });
-        if (unassigned.length) buckets[0].fields = unassigned.concat(buckets[0].fields);
+        // Field defs not placed in any section fall to the end of the first section, ordered
+        // by displayOrder as a last resort.
+        var unassigned = Object.keys(fieldDefs).map(function (id) { return fieldDefs[id]; })
+            .filter(function (d) { return d.id && !_fieldIsHidden(d) && !assigned[d.id]; })
+            .sort(function (a, b) { return (a.displayOrder || 0) - (b.displayOrder || 0); })
+            .map(function (d) { return {id: d.id, link: ''}; });
+        if (unassigned.length) {
+            if (buckets.length) buckets[0].fields = buckets[0].fields.concat(unassigned);
+            else buckets.push({name: 'Details', link: '', fields: unassigned});
+        }
         return buckets.filter(function (b) { return b.fields.length > 0; });
     }
 
@@ -1872,6 +1883,12 @@
             var titleEl = document.createElement('div');
             titleEl.className = 'form-section-title';
             titleEl.textContent = sec.name || 'Section';
+            if (sec.locked) {
+                var lockTag = document.createElement('span');
+                lockTag.className = 'form-section-lock';
+                lockTag.textContent = ' 🔒 read-only in this state';
+                titleEl.appendChild(lockTag);
+            }
             block.appendChild(titleEl);
             sec.fields.forEach(function (sf) {
                 if (!sf.id) return;
@@ -1880,17 +1897,20 @@
                 if (!def) def = {id: sf.id, title: sf.title || _titleCaseId(sf.id),
                                  type: sf.ftype || {title: 'Single Line Text'},
                                  editability: 'ALWAYS', visibility: true, picklist: null, fieldValidators: []};
-                var fieldEl = buildFormField(sf.id, def);
+                var fieldEl = buildFormField(sf.id, def, sec.locked);
                 if (fieldEl) block.appendChild(fieldEl);
             });
             container.appendChild(block);
         });
     }
 
-    function buildFormField(fieldId, def) {
+    function buildFormField(fieldId, def, sectionLocked) {
         var typeTitle   = (def && def.type && def.type.title) || 'Single Line Text';
         var editability = def.editability || 'ALWAYS';
-        var isReadOnly  = editability === 'NEVER' || ((editability === 'ON_CREATION' || editability === 'CREATE_ONLY') && formMode === 'edit');
+        // A section locked in the current workflow state makes all its fields read-only
+        // (FM rejects writes to them); reflect that in the form.
+        var isReadOnly  = !!sectionLocked || editability === 'NEVER'
+            || ((editability === 'ON_CREATION' || editability === 'CREATE_ONLY') && formMode === 'edit');
         var wrap = document.createElement('div');
         wrap.className = 'form-field';
         var isReq = (def.fieldValidators || []).some(function (v) { return v.validatorName === 'required'; });
@@ -2097,6 +2117,7 @@
         // Required-field validation
         var missingLabels = [];
         formSections.forEach(function (sec) {
+            if (sec.locked) return;  // locked-section fields can't be edited — don't require them
             (sec.fields || []).forEach(function (sf) {
                 if (!sf.id) return;
                 var def = formFieldDefs[sf.id];
@@ -2121,6 +2142,7 @@
         // against the item's original values lives here in the frontend).
         var fieldValues = {};
         formSections.forEach(function (sec) {
+            if (sec.locked) return;  // FM rejects writes to locked-section fields
             (sec.fields || []).forEach(function (sf) {
                 if (!sf.id) return;
                 var def = formFieldDefs[sf.id];

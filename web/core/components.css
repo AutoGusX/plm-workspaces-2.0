@@ -439,7 +439,14 @@ tbody td:last-child { border-right: none; }
 .form-scroll { flex: 1; overflow-y: auto; padding: 14px 14px 72px; background: var(--bg); }
 .form-title {
     font-size: var(--fs-lg); font-weight: 600;
-    color: var(--ink-primary); margin-bottom: 12px; letter-spacing: -0.01em;
+    color: var(--ink-primary); margin-bottom: 0; letter-spacing: -0.01em;
+    flex-shrink: 0; padding: 12px 14px 10px;
+}
+/* Scrollable form body: title + footer stay fixed, the fields scroll between them.
+   min-height:0 lets this flex child shrink below content height so overflow engages. */
+.form-sections {
+    flex: 1 1 auto; min-height: 0; overflow-y: auto;
+    padding: 0 14px 14px; background: var(--bg);
 }
 .form-section-block {
     margin-bottom: 12px;
@@ -451,6 +458,10 @@ tbody td:last-child { border-right: none; }
     color: var(--ink-label); text-transform: uppercase; letter-spacing: 0.06em;
     padding: 7px 12px; background: var(--surface-alt);
     border-bottom: 1px solid var(--border-soft); margin-bottom: 0;
+}
+.form-section-lock {
+    font-weight: 600; text-transform: none; letter-spacing: 0;
+    color: var(--ink-muted); margin-left: 6px;
 }
 .form-field {
     display: grid; grid-template-columns: var(--label-col) 1fr;
