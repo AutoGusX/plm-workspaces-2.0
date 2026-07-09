@@ -25,39 +25,103 @@ def _or_none(s):
     return t or None
 
 
+def _to_schematic(electron, obj):
+    """Best-effort: turn an arbitrary product/design object into a Schematic.
+    Tries a direct Schematic cast, then a Board cast -> linkedSchematic, then a couple
+    of design accessors seen across Electronics builds. Returns a Schematic or None."""
+    if obj is None:
+        return None
+    try:
+        s = electron.Schematic.cast(obj)
+        if s is not None:
+            return s
+    except Exception:
+        pass
+    try:
+        b = electron.Board.cast(obj)
+        if b is not None:
+            ls = b.linkedSchematic
+            if ls is not None:
+                return ls
+    except Exception:
+        pass
+    # Some builds expose an EcadDesign/Document that owns the schematic.
+    for attr in ('schematic', 'activeSchematic', 'linkedSchematic'):
+        try:
+            sub = getattr(obj, attr, None)
+            if sub is not None:
+                s = electron.Schematic.cast(sub)
+                if s is not None:
+                    return s
+        except Exception:
+            pass
+    return None
+
+
 def _get_schematic(app):
-    """Return (schematic, error). Accepts either an active Schematic or an active Board
-    (via board.linkedSchematic). error is a user-facing string or None."""
+    """Return (schematic, error). Robustly locates the active electronics schematic by
+    checking the active product, every product in the active document, and the
+    ElectronManager. On failure the error string carries a diagnostic of what WAS found
+    so the exact object path can be pinned down."""
     try:
         import adsk.electron as electron
     except Exception:
         return None, ('The Fusion Electronics API is not available in this Fusion '
                       'version. Open an electronics (PCB/Schematic) design and update Fusion.')
-    try:
-        product = app.activeProduct
-    except Exception:
-        product = None
-    if product is None:
-        return None, 'No active design. Open an electronics schematic or PCB, then try again.'
 
-    sch = None
+    diag = {'activeProduct': None, 'products': [], 'mgr': None}
+
+    # 1) Active product.
     try:
-        sch = electron.Schematic.cast(product)
+        ap = app.activeProduct
     except Exception:
-        sch = None
-    if sch is None:
-        # Maybe the PCB layout is active — hop to its linked schematic.
+        ap = None
+    if ap is not None:
+        diag['activeProduct'] = getattr(ap, 'objectType', None) or getattr(ap, 'productType', None)
+        sch = _to_schematic(electron, ap)
+        if sch is not None:
+            return sch, None
+
+    # 2) Every product in the active document.
+    try:
+        doc = app.activeDocument
+        prods = doc.products if doc else None
+        count = prods.count if prods else 0
+    except Exception:
+        prods, count = None, 0
+    for i in range(count):
         try:
-            board = electron.Board.cast(product)
-            if board is not None:
-                sch = board.linkedSchematic
+            p = prods.item(i)
         except Exception:
-            sch = None
-    if sch is None:
-        return None, ('Active product is not an electronics schematic or PCB. Switch to '
-                      'the Electronics workspace with a schematic (or a PCB that has a '
-                      'linked schematic) open.')
-    return sch, None
+            p = None
+        if p is None:
+            continue
+        diag['products'].append(getattr(p, 'objectType', None) or getattr(p, 'productType', None))
+        sch = _to_schematic(electron, p)
+        if sch is not None:
+            return sch, None
+
+    # 3) ElectronManager singleton — try its design/schematic accessors.
+    try:
+        mgr = electron.ElectronManager.get()
+    except Exception:
+        mgr = None
+    if mgr is not None:
+        diag['mgr'] = getattr(mgr, 'objectType', 'ElectronManager')
+        for attr in ('activeSchematic', 'schematic', 'activeDesign', 'activeBoard',
+                     'activeDocument', 'design', 'board'):
+            try:
+                obj = getattr(mgr, attr, None)
+            except Exception:
+                obj = None
+            sch = _to_schematic(electron, obj)
+            if sch is not None:
+                return sch, None
+
+    msg = ('Could not locate an electronics schematic. Open a schematic (or a PCB with a '
+           'linked schematic) and try again. [diagnostic: activeProduct=%r; documentProducts=%r; '
+           'electronManager=%r]' % (diag['activeProduct'], diag['products'], diag['mgr']))
+    return None, msg
 
 
 def _variant_populated(sch, part):
