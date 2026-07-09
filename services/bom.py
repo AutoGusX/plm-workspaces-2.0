@@ -19,10 +19,10 @@
 import re
 
 _BOM_ACCEPT = 'application/vnd.autodesk.plm.bom.bulk+json'
-_FIELD_ID_RE = re.compile(r'/fields/(\d+)\b')
 _EDGE_ID_RE = re.compile(r'/bom-items/(\d+)\b')
 _ITEM_ID_RE = re.compile(r'/items/(\d+)\b')
-_QTY_FIELD_ID = '103'   # BOM-view quantity field id (from the extension)
+# Child refs come back as URNs: urn:adsk.plm:tenant.workspace.item:TENANT.<ws>.<item>
+_URN_ITEM_RE = re.compile(r'item:[A-Za-z0-9]+\.(\d+)\.(\d+)$')
 
 
 def _abs(client, link):
@@ -64,7 +64,12 @@ def _node_index(nodes):
 
 
 def _edge_quantity(edge):
-    """Quantity from edge.quantity, else from the edge's field id 103, default 1.0."""
+    """Quantity from edge.quantity, else the first numeric-valued row field.
+
+    The BOM-row quantity field id is tenant/viewdef-specific (NOT the extension's 103),
+    but among the row fields only quantity parses as a float — UoM is text ('EA') and
+    isPinned is 'true'/'false'. So we pick the first float-parseable field value.
+    """
     q = edge.get('quantity')
     if q not in (None, ''):
         try:
@@ -74,14 +79,28 @@ def _edge_quantity(edge):
     for f in edge.get('fields') or []:
         if not isinstance(f, dict):
             continue
-        link = (f.get('metaData') or {}).get('link') or f.get('__self__') or ''
-        m = _FIELD_ID_RE.search(link)
-        if m and m.group(1) == _QTY_FIELD_ID:
-            try:
-                return float(str(f.get('value')).replace(',', '').strip())
-            except (ValueError, TypeError):
-                return 1.0
+        v = f.get('value')
+        if v in (None, '') or str(v).strip().lower() in ('true', 'false'):
+            continue
+        try:
+            return float(str(v).replace(',', '').strip())
+        except (ValueError, TypeError):
+            continue
     return 1.0
+
+
+def _child_link(raw_child, node_idx):
+    """Resolve an edge child ref (URN / link / bare) to a workspace-scoped item link."""
+    if not raw_child:
+        return ''
+    if raw_child.startswith('/api'):
+        return raw_child
+    if raw_child in node_idx:
+        return node_idx[raw_child]
+    m = _URN_ITEM_RE.search(raw_child)
+    if m:
+        return item_link(m.group(1), m.group(2))
+    return ''
 
 
 def read_bom(client, workspace_id, item_id, view_id=1, depth=100, revision_bias='release',
@@ -120,11 +139,12 @@ def read_bom(client, workspace_id, item_id, view_id=1, depth=100, revision_bias=
     for e in all_edges:
         if not isinstance(e, dict):
             continue
-        edge_link = e.get('__self__') or e.get('link') or ''
-        m = _EDGE_ID_RE.search(edge_link)
-        edge_id = m.group(1) if m else str(e.get('edgeId') or e.get('id') or e.get('bomItemId') or '')
-        raw_child = _ref_link(e.get('child'))
-        child_link = node_idx.get(raw_child, raw_child if raw_child.startswith('/api') else '')
+        edge_link = e.get('edgeLink') or e.get('__self__') or e.get('link') or ''
+        edge_id = str(e.get('edgeId') or e.get('id') or e.get('bomItemId') or '')
+        if not edge_id:
+            m = _EDGE_ID_RE.search(edge_link)
+            edge_id = m.group(1) if m else ''
+        child_link = _child_link(_ref_link(e.get('child')), node_idx)
         cm = _ITEM_ID_RE.search(child_link)
         child_id = cm.group(1) if cm else ''
         key = edge_id or child_link

@@ -159,21 +159,33 @@ WORKSPACE_ID_TO_COMMAND = {str(wid): key for key, wid in WORKSPACE_IDS.items()}
 # values are target field systemNames; the mapping UI lets the user remap to whatever
 # their workspace actually uses. Manufacturer + sourcing live on the MPN record.
 # ---------------------------------------------------------------------------
+# Defaults reflect the FAA Sandbox model verified 2026-07-09 (systemNames are stable
+# across tenants; the wizard still lets the user re-pick/remap and saves to app_prefs).
+# Link model: Item <-> MPN is driven from the MPN side — the MPN record's REFERENCE_ITEM
+# points at the component Item (the Item's own REFERENCE_MPN is a NEVER-editable sync
+# reverse). MPN.MANUFACTURER references a WS_SUPPLIERS record.
 ELECTRONICS_BOM_DEFAULT_CONFIG = {
-    'itemsWs': '',          # component + parent workspace systemName (e.g. 'WS_ITEMS')
-    'mpnWs': '',            # MPN sourcing workspace systemName
-    'itemMapping': {        # electronics BOM field -> component-Item field systemName
-        'mpn': 'MPN',                 # reference -> MPN workspace record
+    'itemsWs': 'WS_ITEMS',                  # component + parent items
+    'mpnWs': 'WS_MANUFACTURER_PN',          # MPN sourcing records
+    'supplierWs': 'WS_SUPPLIERS',           # manufacturer/supplier records
+    'itemMapping': {        # electronics BOM field -> WS_ITEMS field systemName
         'value': 'VALUE',
         'footprint': 'FOOTPRINT',
         'description': 'DESCRIPTION',
+        'mpn': 'MANUFACTURER_PN',           # plain-text copy on the item (canonical link is the MPN record)
+        'manufacturer': 'MANUFACTURER',     # plain-text copy on the item
     },
-    'mpnMapping': {         # electronics BOM field -> MPN-record field systemName
-        'mpn': 'MPN',
-        'manufacturer': 'MANUFACTURER',
+    'titleTemplate': '{mpn}',               # WS_ITEMS TITLE is required — composed per component
+    'mpnMapping': {         # electronics BOM field -> WS_MANUFACTURER_PN record field
+        'mpn': 'MANUFACTURER_PN',
+        'referenceItemField': 'REFERENCE_ITEM',   # reference back to the component Item (drives the link)
+        'manufacturerField': 'MANUFACTURER',      # reference -> WS_SUPPLIERS record
     },
-    'parentKeyField': 'SOURCE_DESIGN_ID',      # stable key on the parent PCBA Item
-    'refDesField': 'REFERENCE_DESIGNATORS',    # BOM-row field for reference designators
+    'supplierMapping': {    # electronics BOM field -> WS_SUPPLIERS record field
+        'nameField': 'NAME',                # match/create suppliers by NAME
+    },
+    'parentKeyField': 'SOURCE_DESIGN_ID',   # stable key on the parent PCBA Item (find-or-create)
+    'refDesField': '',                      # BOM-row reference-designator field id (viewdef) — TBD
 }
 
 # Affected Items (LINKEDITEMS tab) is served off view id 11 for all change workspaces.
