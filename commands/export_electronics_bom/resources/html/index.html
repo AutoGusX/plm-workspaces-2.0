@@ -86,9 +86,23 @@ td.qty { text-align:right; font-variant-numeric:tabular-nums; }
     <div class="cfg-row"><label>Suppliers</label><select id="wsSupplier"></select></div>
     <div class="cfg-section-title">Component field mapping (Items workspace)</div>
     <div id="itemMapRows"></div>
-    <div class="cfg-section-title">Parent &amp; identity</div>
+    <div class="cfg-row"><label>Title from</label>
+      <select id="titleSource">
+        <option value="mpn">MPN</option>
+        <option value="value">Value</option>
+        <option value="footprint">Footprint</option>
+        <option value="description">Description</option>
+        <option value="composed">Composed…</option>
+      </select></div>
+    <div class="cfg-row" id="titleTemplateRow" style="display:none;">
+      <label>Title template</label><input id="titleTemplate" placeholder="{mpn} — {value}"></div>
+    <div class="cfg-section-title">BOM row mapping</div>
+    <div class="cfg-row"><label>Reference designators →</label><select id="refDesField"></select></div>
+    <div class="cfg-section-title">Parent &amp; files</div>
     <div class="cfg-row"><label>Parent key field</label><input id="parentKeyField"></div>
-    <div class="cfg-row"><label>Title template</label><input id="titleTemplate"></div>
+    <div class="cfg-row"><label>Sync design files</label>
+      <span style="flex:1;"><label style="font-weight:400;"><input type="checkbox" id="syncFiles">
+        Also attach EAGLE .sch/.brd (zipped) to the parent item</label></span></div>
     <div id="cfgMsg" class="warn"></div>
   </div>
 
@@ -102,6 +116,7 @@ td.qty { text-align:right; font-variant-numeric:tabular-nums; }
   <div class="panel" id="panel-results">
     <div class="summary" id="pushCounts"></div>
     <div id="pushWarnings"></div>
+    <div id="pushFiles"></div>
     <div id="pushTable"></div>
   </div>
 </div>

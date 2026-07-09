@@ -155,3 +155,109 @@ class ExportElectronicsBomCommand(PaletteCommand):
             return {'success': False, 'error': 'No BOM rows to push — extract the BOM first.'}
         cfg = self._merged_config((data or {}).get('config'))
         return _export.push_plan(self._client(ctx), bom, cfg)
+
+    @action('getBomRowFields', async_=True)
+    def _act_get_bom_row_fields(self, _ctx, data):
+        """Return the Items workspace's BOM-row (viewdef) fields for mapping (e.g. the
+        Reference Designators field). Payload: {systemName?|workspaceId?}."""
+        ctx, err = self._resolve_ctx()
+        if err:
+            return err
+        client = self._client(ctx)
+        ws = (data or {}).get('workspaceId')
+        if not ws:
+            sys_name = (data or {}).get('systemName') or self._merged_config().get('itemsWs')
+            wres = client.workspaces()
+            if wres.get('success'):
+                ws = wres.get('system_name_to_id', {}).get(sys_name)
+        if not ws:
+            return {'success': False, 'error': 'Items workspace not resolved.'}
+        result, ferr = client.bom_row_fields(ws)
+        if ferr:
+            unauth = ferr == 'unauthorized'
+            return {'success': False, 'error': 'Not signed in.' if unauth else ferr,
+                    'unauthorized': unauth}
+        return {'success': True, 'fields': (result or {}).get('fields', []),
+                'viewId': (result or {}).get('viewId')}
+
+    # ------------------------------------------------------------------
+    # Optional: sync EAGLE design files (.sch/.brd) to the parent PCBA item.
+    # Export is SYNC (adsk.electron, main thread); upload is ASYNC (S3).
+    # ------------------------------------------------------------------
+    @action('exportDesignFiles')   # SYNC — adsk.electron export on the main thread
+    def _act_export_files(self, _ctx, data):
+        """Export the active design's .sch/.brd, zip them, return a one-file manifest."""
+        import os
+        import tempfile
+        import zipfile
+        out_dir = tempfile.mkdtemp(prefix='plm_ebom_')
+        result, err = _ebom.export_design_files(self._app, out_dir)
+        if err:
+            return {'success': False, 'error': err}
+        files = result.get('files') or []
+        base = _ebom._safe_name(result.get('designName') or 'design')
+        zip_path = os.path.join(out_dir, base + '_eagle.zip')
+        try:
+            with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as z:
+                for f in files:
+                    z.write(f['path'], arcname=f['name'])
+        except Exception as e:
+            return {'success': False, 'error': 'Could not zip design files: %s' % e}
+        return {'success': True,
+                'files': [{'name': os.path.basename(zip_path), 'path': zip_path,
+                           'size': os.path.getsize(zip_path),
+                           'resourceName': base + '_eagle'}],
+                'warnings': result.get('warnings', [])}
+
+    @action('uploadDesignFiles', async_=True)
+    def _act_upload_files(self, _ctx, data):
+        """Attach exported design files to the parent PCBA item (version-bump on re-sync).
+        Payload: {parentItemId, files:[{name,path,size,resourceName}], config?}."""
+        ctx, err = self._resolve_ctx()
+        if err:
+            return err
+        import os
+        from ...services import attachments as _att
+        files = (data or {}).get('files') or []
+        parent_item = str((data or {}).get('parentItemId') or '')
+        if not parent_item or not files:
+            return {'success': False, 'error': 'Missing parentItemId or files.'}
+        client = self._client(ctx)
+        cfg = self._merged_config((data or {}).get('config'))
+        wres = client.workspaces()
+        ws = wres.get('system_name_to_id', {}).get(cfg.get('itemsWs')) if wres.get('success') else None
+        if not ws:
+            return {'success': False, 'error': 'Items workspace not resolved.'}
+        existing, _e = _att.list_attachments(client, ws, parent_item)
+        results = []
+        for f in files:
+            path = f.get('path'); name = f.get('name'); resource = f.get('resourceName') or name
+            if not path or not os.path.isfile(path):
+                results.append({'name': name, 'success': False, 'error': 'File missing.'})
+                continue
+            try:
+                size = os.path.getsize(path)
+                with open(path, 'rb') as fh:
+                    file_bytes = fh.read()
+            except OSError as e:
+                results.append({'name': name, 'success': False, 'error': str(e)})
+                continue
+            existing_id = None
+            for att in (existing or []):
+                an = att.get('name', '')
+                if isinstance(an, str) and resource and an.lower().startswith(resource.lower()):
+                    existing_id = att.get('id')
+                    break
+            up, uerr = _att.request_upload(client, ws, parent_item, name, resource, size,
+                                           existing_id, comment='Electronics design files')
+            if uerr:
+                results.append({'name': name, 'success': False, 'error': uerr})
+                continue
+            s3err = _att.upload_to_s3(client, up['s3_url'], up['extra_headers'], file_bytes)
+            if s3err:
+                results.append({'name': name, 'success': False, 'error': s3err})
+                continue
+            ver, cierr = _att.checkin(client, ws, parent_item, up['attachment_id'])
+            results.append({'name': name, 'success': not cierr, 'version': ver,
+                            'isNewVersion': existing_id is not None, 'error': cierr})
+        return {'success': all(r['success'] for r in results), 'results': results}

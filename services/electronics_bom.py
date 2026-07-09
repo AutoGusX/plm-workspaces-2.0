@@ -17,6 +17,13 @@
 #     sorted Part.name list.
 #   - Normalize each group to an FM-export-ready row.
 
+import os
+import re as _re
+
+
+def _safe_name(s):
+    return _re.sub(r'[^\w\-]', '_', str(s or 'design')).strip('_') or 'design'
+
 
 def _or_none(s):
     if s is None:
@@ -144,8 +151,10 @@ def _variant_populated(sch, part):
 
 
 def _read_attrs(part):
-    """Return (mpn, manufacturer) from a Part's free-form attributes, case-insensitively."""
-    mpn = manufacturer = None
+    """Return (mpn, manufacturer, description) from a Part's free-form attributes,
+    case-insensitively. Electronics parts have no fixed schema, so DESCRIPTION/DESC are
+    read best-effort (a device-name fallback for description is applied by the caller)."""
+    mpn = manufacturer = description = None
     try:
         attrs = part.attributes
         if attrs is not None:
@@ -158,9 +167,27 @@ def _read_attrs(part):
                     mpn = _or_none(a.value)
                 elif up in ('MF', 'MANUFACTURER'):
                     manufacturer = _or_none(a.value)
+                elif up in ('DESCRIPTION', 'DESC'):
+                    description = _or_none(a.value)
     except Exception:
         pass
-    return mpn, manufacturer
+    return mpn, manufacturer, description
+
+
+def _device_name(part):
+    """Best-effort component type name (device / deviceset) for a description fallback."""
+    for path in (('device', 'name'), ('device', 'deviceSet', 'name'), ('deviceSet', 'name')):
+        try:
+            obj = part
+            for attr in path:
+                obj = getattr(obj, attr, None)
+                if obj is None:
+                    break
+            if isinstance(obj, str) and obj.strip():
+                return obj.strip()
+        except Exception:
+            continue
+    return None
 
 
 def extract_bom(app):
@@ -248,7 +275,9 @@ def extract_bom(app):
             skipped += 1
             continue
 
-        mpn, manufacturer = _read_attrs(p)
+        mpn, manufacturer, description = _read_attrs(p)
+        if not description:
+            description = _device_name(p)   # fallback: component/device type name
         try:
             designator = _or_none(p.name) or '(unnamed)'
         except Exception:
@@ -266,10 +295,11 @@ def extract_bom(app):
                 'manufacturer': manufacturer,
                 'value': value,
                 'footprint': footprint,
+                'description': description,
                 'quantity': 0,
                 'referenceDesignators': [],
                 'raw': {'value': value, 'footprint': footprint, 'mpn': mpn,
-                        'manufacturer': manufacturer},
+                        'manufacturer': manufacturer, 'description': description},
             }
             groups[key] = row
             order.append(key)
@@ -294,3 +324,47 @@ def extract_bom(app):
         'partCount': part_count,
         'warnings': warnings,
     }, None
+
+
+def export_design_files(app, out_dir):
+    """Export the active design's EAGLE files into out_dir via the electronics export
+    manager. Writes the schematic (.sch) and, when a linked board exists, the board (.brd).
+    Returns ({'designName', 'files':[{name, path, size}], 'warnings':[...]}, error).
+    SYNC / main-thread only (Fusion API). Preview API — guarded lazily like extract_bom."""
+    sch, err = _get_schematic(app)
+    if err:
+        return None, err
+    try:
+        design_name = sch.name or 'design'
+    except Exception:
+        design_name = 'design'
+    base = _safe_name(design_name)
+    files, warnings = [], []
+
+    def _export(mgr_owner, factory, ext):
+        try:
+            mgr = mgr_owner.exportManager
+            opts = getattr(mgr, factory)()
+            path = os.path.join(out_dir, base + ext)
+            opts.outputPath = path
+            if mgr.execute(opts) and os.path.isfile(path):
+                files.append({'name': os.path.basename(path), 'path': path,
+                              'size': os.path.getsize(path)})
+            else:
+                warnings.append('%s export did not produce a file.' % ext)
+        except Exception as e:
+            warnings.append('%s export failed: %s' % (ext, e))
+
+    _export(sch, 'createEagleSchExportOptions', '.sch')
+    try:
+        board = sch.linkedBoard
+    except Exception:
+        board = None
+    if board is not None:
+        _export(board, 'createEagleBrdExportOptions', '.brd')
+    else:
+        warnings.append('No linked board — exported the schematic only.')
+
+    if not files:
+        return None, ('Could not export any design files. ' + ' '.join(warnings)).strip()
+    return {'designName': design_name, 'files': files, 'warnings': warnings}, None

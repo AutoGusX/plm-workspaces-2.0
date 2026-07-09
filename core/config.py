@@ -175,7 +175,10 @@ ELECTRONICS_BOM_DEFAULT_CONFIG = {
         'mpn': 'MANUFACTURER_PN',           # plain-text copy on the item (canonical link is the MPN record)
         'manufacturer': 'MANUFACTURER',     # plain-text copy on the item
     },
-    'titleTemplate': '{mpn}',               # WS_ITEMS TITLE is required — composed per component
+    'titleSource': 'mpn',                   # which BOM property fills the required TITLE
+                                            # ('mpn'|'value'|'footprint'|'description'|'composed')
+    'titleTemplate': '{mpn}',               # used only when titleSource == 'composed'
+    'syncFiles': False,                     # opt-in: also attach EAGLE .sch/.brd (zipped) to the parent
     'mpnMapping': {         # electronics BOM field -> WS_MANUFACTURER_PN record field
         'mpn': 'MANUFACTURER_PN',
         'referenceItemField': 'REFERENCE_ITEM',   # reference back to the component Item (drives the link)

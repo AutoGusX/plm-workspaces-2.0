@@ -243,3 +243,71 @@ def working_item_id(client, workspace_id, item_id):
             if m:
                 return m.group(1)
     return item_id
+
+
+# ---------------------------------------------------------------------------
+# BOM-row (viewdef) field metadata — the "BOM properties" (Reference Designators,
+# Units, etc.) that live on the BOM view, distinct from item-detail fields. Their
+# metaData links are what add_bom_row(fields=[{link, value}]) needs.
+# ---------------------------------------------------------------------------
+def _get_json(client, path):
+    r = client._request('GET', f'{client.base}{path}', empty_body_as={})
+    if not r.ok:
+        return None, ('unauthorized' if r.unauthorized else r.error)
+    return r.data, None
+
+
+def viewdef_fields(client, workspace_id, view_id, viewdef_id):
+    """GET /views/{v}/viewdef/{vd}/fields -> ([{id, title, link}], error)."""
+    data, err = _get_json(
+        client, f'/api/v3/workspaces/{workspace_id}/views/{view_id}/viewdef/{viewdef_id}/fields')
+    if err:
+        return None, err
+    raw = data.get('fields') if isinstance(data, dict) else (data if isinstance(data, list) else [])
+    out = []
+    for f in raw or []:
+        if not isinstance(f, dict):
+            continue
+        self_ref = f.get('__self__') if isinstance(f.get('__self__'), dict) else {}
+        link = self_ref.get('link') or f.get('link') or ''
+        m = re.search(r'/fields/(\d+)', link)
+        out.append({'id': m.group(1) if m else '',
+                    'title': f.get('name') or f.get('title') or '', 'link': link})
+    return out, None
+
+
+def bom_row_fields(client, workspace_id):
+    """Locate the workspace's Bill-of-Materials view and return the union of its viewdefs'
+    row fields — used to map BOM-row properties (e.g. Reference Designators). Returns
+    ({'viewId', 'fields':[{id,title,link}]}, error). Empty fields if no BOM view."""
+    views, err = _get_json(client, f'/api/v3/workspaces/{workspace_id}/views')
+    if err:
+        return None, err
+    vlist = views if isinstance(views, list) else ((views or {}).get('views')
+            or (views or {}).get('items') or [])
+    bom_view_id = None
+    for v in vlist:
+        if not isinstance(v, dict):
+            continue
+        title = (v.get('title') or v.get('name') or '').lower()
+        link = v.get('link') or (v.get('__self__', {}) or {}).get('link') or ''
+        if 'bill of material' in title or 'bom' in title:
+            m = re.search(r'/views/(\d+)', link)
+            bom_view_id = m.group(1) if m else None
+            break
+    if not bom_view_id:
+        return {'viewId': None, 'fields': []}, None
+    vd, verr = _get_json(client, f'/api/v3/workspaces/{workspace_id}/views/{bom_view_id}')
+    if verr:
+        return None, verr
+    seen, out = set(), []
+    for bv in (vd or {}).get('bomViews') or []:
+        m = re.search(r'/viewdef/(\d+)', bv.get('link') or '')
+        if not m:
+            continue
+        fields, _e = viewdef_fields(client, workspace_id, bom_view_id, m.group(1))
+        for f in fields or []:
+            if f['link'] and f['link'] not in seen:
+                seen.add(f['link'])
+                out.append(f)
+    return {'viewId': bom_view_id, 'fields': out}, None

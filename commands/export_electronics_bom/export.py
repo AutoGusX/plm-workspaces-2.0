@@ -77,17 +77,23 @@ def _resolve_ws(client, config):
             'supplier': sn.get(config.get('supplierWs'))}, None
 
 
-def _compose_title(template, row):
-    try:
-        title = (template or '{mpn}').format(
-            mpn=row.get('mpn') or '', value=row.get('value') or '',
-            footprint=row.get('footprint') or '', manufacturer=row.get('manufacturer') or '')
-    except (KeyError, IndexError, ValueError):
-        title = row.get('mpn') or ''
-    title = title.strip(' -')
-    if not title:
-        title = (row.get('value') or '') + ' ' + (row.get('footprint') or '')
-        title = title.strip() or 'Electronics component'
+def _compose_title(config, row):
+    """TITLE (required on the Item) from a single BOM property, or a composed template."""
+    source = (config.get('titleSource') or 'mpn')
+    if source == 'composed':
+        try:
+            title = (config.get('titleTemplate') or '{mpn}').format(
+                mpn=row.get('mpn') or '', value=row.get('value') or '',
+                footprint=row.get('footprint') or '', manufacturer=row.get('manufacturer') or '',
+                description=row.get('description') or '')
+        except (KeyError, IndexError, ValueError):
+            title = row.get('mpn') or ''
+    else:
+        title = row.get(source) or ''
+    title = str(title).strip(' -')
+    if not title:   # fallbacks so the required field is never blank
+        title = (row.get('mpn') or ((row.get('value') or '') + ' ' + (row.get('footprint') or ''))).strip()
+        title = title or 'Electronics component'
     return title
 
 
@@ -263,12 +269,12 @@ def push_plan(client, bom, config):
     item_map = config.get('itemMapping', {})
     mpn_map = config.get('mpnMapping', {})
     supplier_map = config.get('supplierMapping', {})
-    title_tmpl = config.get('titleTemplate', '{mpn}')
     parent_key = config.get('parentKeyField', 'SOURCE_DESIGN_ID')
     ref_item_field = mpn_map.get('referenceItemField', 'REFERENCE_ITEM')
     mpn_num_field = mpn_map.get('mpn', 'MANUFACTURER_PN')
     mfr_ref_field = mpn_map.get('manufacturerField', 'MANUFACTURER')
     name_field = supplier_map.get('nameField', 'NAME')
+    refdes_field = config.get('refDesField') or ''   # BOM-row (viewdef) field link
 
     out = {'success': True, 'results': [], 'warnings': [],
            'counts': {'itemsCreated': 0, 'itemsUpdated': 0, 'mpnCreated': 0,
@@ -281,7 +287,7 @@ def push_plan(client, bom, config):
         res = {'mpn': ln.get('mpn'), 'title': None, 'itemId': ln.get('itemId'),
                'action': ln['itemStatus'], 'ok': False, 'error': None}
         try:
-            title = _compose_title(title_tmpl, row)
+            title = _compose_title(config, row)
             res['title'] = title
             # 1) component item (create or update)
             fv = _item_field_values(config, row, title)
@@ -355,19 +361,26 @@ def push_plan(client, bom, config):
     desired_ids = set()
     next_num = (max([int(e['itemNumber'] or 0) for e in existing_edges], default=0)) + 1
 
-    for (item_link, qty, _refdes) in child_links:
+    for (item_link, qty, refdes) in child_links:
         cid = re.search(r'/items/(\d+)', item_link)
         cid = cid.group(1) if cid else None
         if cid:
             desired_ids.add(cid)
+        # Reference designators are a BOM-row (viewdef) field, written via fields=[...].
+        row_fields = None
+        if refdes_field and refdes:
+            row_fields = [{'link': refdes_field, 'value': ', '.join(refdes)}]
         edge = existing_children.get(cid)
         if edge:
-            if float(edge.get('quantity') or 0) != float(qty or 1):
-                err = client.update_bom_row(parent_link, edge['edgeId'], item_link, qty or 1)
-                if not err:
+            qty_changed = float(edge.get('quantity') or 0) != float(qty or 1)
+            if qty_changed or row_fields:
+                err = client.update_bom_row(parent_link, edge['edgeId'], item_link, qty or 1,
+                                            fields=row_fields)
+                if not err and qty_changed:
                     out['counts']['bomUpdated'] += 1
         else:
-            added, err = client.add_bom_row(parent_link, item_link, qty or 1, item_number=next_num)
+            added, err = client.add_bom_row(parent_link, item_link, qty or 1,
+                                            item_number=next_num, fields=row_fields)
             if not err:
                 out['counts']['bomAdded'] += 1
                 next_num += 1

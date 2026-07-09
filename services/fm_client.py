@@ -170,6 +170,10 @@ class FmClient:
     def working_item_id(self, ws, item_id):
         return _bom.working_item_id(self, ws, item_id)
 
+    def bom_row_fields(self, ws):
+        """BOM-row (viewdef) field metadata for mapping (e.g. Reference Designators)."""
+        return _bom.bom_row_fields(self, ws)
+
     # ------------------------------------------------------------------
     # Tabs / affected items / permissions
     # ------------------------------------------------------------------

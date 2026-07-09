@@ -147,13 +147,47 @@
                 });
                 sel.value = _config[key] || '';
             });
-            byId('wsItems').onchange = function () { _config.itemsWs = this.value; loadItemFields(); };
+            byId('wsItems').onchange = function () { _config.itemsWs = this.value; loadItemFields(); loadBomRowFields(); };
             byId('wsMpn').onchange = function () { _config.mpnWs = this.value; };
             byId('wsSupplier').onchange = function () { _config.supplierWs = this.value; };
             loadItemFields();
+            loadBomRowFields();
         }).catch(function (e) { foot('Error: ' + e); });
-        byId('parentKeyField').value = _config.parentKeyField || '';
+        // Title source dropdown + composed template
+        var ts = byId('titleSource');
+        ts.value = _config.titleSource || 'mpn';
         byId('titleTemplate').value = _config.titleTemplate || '{mpn}';
+        function syncTitleUI() {
+            _config.titleSource = ts.value;
+            byId('titleTemplateRow').style.display = (ts.value === 'composed') ? 'flex' : 'none';
+        }
+        ts.onchange = syncTitleUI; syncTitleUI();
+        byId('parentKeyField').value = _config.parentKeyField || '';
+        var sf = byId('syncFiles'); sf.checked = !!_config.syncFiles;
+        sf.onchange = function () { _config.syncFiles = this.checked; };
+    }
+
+    function loadBomRowFields() {
+        var sel = byId('refDesField'); sel.innerHTML = '';
+        sel.appendChild(el('option', { value: '' }, '— skip —'));
+        if (!_config.itemsWs) return;
+        plmSend('getBomRowFields', { systemName: _config.itemsWs }).then(function (r) {
+            var d = plmParse(r);
+            if (!d.success) { return; }
+            (d.fields || []).forEach(function (f) {
+                var o = el('option', { value: f.link }, (f.title || f.id));
+                sel.appendChild(o);
+            });
+            sel.value = _config.refDesField || '';
+            // Auto-select a Reference Designator(s) field if none saved yet.
+            if (!sel.value) {
+                (d.fields || []).forEach(function (f) {
+                    if (/designator/i.test(f.title || '')) sel.value = f.link;
+                });
+                _config.refDesField = sel.value || '';
+            }
+            sel.onchange = function () { _config.refDesField = this.value; };
+        }).catch(function () { /* ignore */ });
     }
 
     function loadItemFields() {
@@ -264,16 +298,53 @@
         goStep('results');
         byId('pushCounts').innerHTML = '';
         byId('pushWarnings').innerHTML = '';
+        byId('pushFiles').innerHTML = '';
         byId('pushTable').innerHTML = '<div class="state-msg">Writing to Fusion Manage…</div>';
         plmSend('pushBom', { bom: _bom, config: _config }).then(function (r) {
-            var d = plmParse(r); _busy = false; next.disabled = false;
+            var d = plmParse(r);
             if (!d.success && !d.results) {
+                _busy = false; next.disabled = false;
                 byId('pushTable').innerHTML = '';
                 byId('pushTable').appendChild(el('div', { class: 'state-msg error' }, d.error || 'Push failed.'));
                 return;
             }
             renderResults(d);
+            if (_config.syncFiles && d.parent && d.parent.itemId) {
+                syncDesignFiles(d.parent.itemId);   // keeps _busy until it finishes
+            } else {
+                _busy = false; next.disabled = false;
+            }
         }).catch(function (e) { _busy = false; next.disabled = false; byId('pushTable').innerHTML = ''; byId('pushTable').appendChild(el('div', { class: 'state-msg error' }, 'Error: ' + e)); });
+    }
+
+    function _fileMsg(msg, isErr) {
+        var box = byId('pushFiles');
+        box.appendChild(el('div', { class: isErr ? 'warn' : 'cfg-section-title' }, msg));
+    }
+
+    function syncDesignFiles(parentItemId) {
+        var next = byId('btnNext');
+        byId('pushFiles').innerHTML = '';
+        _fileMsg('Design files: exporting…', false);
+        foot('Exporting design files…');
+        // exportDesignFiles is SYNC (main-thread adsk); uploadDesignFiles is async.
+        plmSend('exportDesignFiles', { designName: _bom.design }).then(function (r) {
+            var d = plmParse(r);
+            byId('pushFiles').innerHTML = '';
+            if (!d.success) { _fileMsg('Design files: export failed — ' + (d.error || ''), true); _busy = false; next.disabled = false; foot(''); return; }
+            (d.warnings || []).forEach(function (m) { _fileMsg('⚠ ' + m, true); });
+            foot('Uploading design files…');
+            plmSend('uploadDesignFiles', { parentItemId: parentItemId, files: d.files, config: _config }).then(function (r2) {
+                var d2 = plmParse(r2);
+                (d2.results || []).forEach(function (res) {
+                    _fileMsg((res.success ? '✓ ' : '✗ ') + res.name +
+                        (res.version ? (' (v' + res.version + (res.isNewVersion ? ', updated' : ', new') + ')') : '') +
+                        (res.error ? (' — ' + res.error) : ''), !res.success);
+                });
+                if (!(d2.results || []).length) _fileMsg('Design files: nothing uploaded.', true);
+                _busy = false; next.disabled = false; foot('Done.');
+            }).catch(function (e) { _fileMsg('Design files: upload error — ' + e, true); _busy = false; next.disabled = false; });
+        }).catch(function (e) { byId('pushFiles').innerHTML = ''; _fileMsg('Design files: export error — ' + e, true); _busy = false; next.disabled = false; });
     }
 
     function renderResults(d) {

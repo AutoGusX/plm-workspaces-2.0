@@ -330,24 +330,33 @@ Raw source: `GET /api/rest/v1/reports/dashboard` (`dashboardReportList.list`) an
 + `xAxisColumn`/`yAxisColumn`). The series column is the `columnKey` that is neither x nor y
 (stacked/multi-series charts). Rendering is inline SVG in `resources/html/static/plm_charts.js`.
 
-## 9.4 Export Electronics BOM (v1) — `commands/export_electronics_bom/`
+## 9.4 Export Electronics BOM — `commands/export_electronics_bom/`
 
-Custom `PaletteCommand` on the Electronics environment panel (`panel='electronics'`,
-`requires_auth=False` for v1). One **SYNC** action (reads `adsk.electron` on the main thread —
-must NOT be async).
+`PaletteCommand` on the Electronics environment panel (`panel='electronics'`, `requires_auth=True`).
+Full feature spec: `docs/EXPORT_ELECTRONICS_BOM_SPEC.md`. SYNC actions touch `adsk.electron`
+(main-thread only); async actions are HTTP.
 
-| Action | Payload | Success response |
-|---|---|---|
-| `getElectronicsBom` | `{}` | `{success, design, rows, partCount, skipped, warnings}` |
+| Action | Sync? | Payload | Success response |
+|---|---|---|---|
+| `getElectronicsBom` | sync | `{}` | `{success, design, designId, rows, partCount, skipped, warnings}` |
+| `getExportConfig` | sync | `{}` | `{success, config}` (saved prefs over the default preset) |
+| `saveExportConfig` | sync | `{config}` | `{success, config}` |
+| `listWorkspaces` | async | `{}` | `{success, workspaces:[{systemName,id,title}]}` |
+| `getMappingFields` | async | `{systemName|workspaceId}` | `{success, fields:[{id,title,type,editability,isReference}]}` |
+| `getBomRowFields` | async | `{systemName|workspaceId}` | `{success, fields:[{id,title,link}], viewId}` (BOM viewdef fields) |
+| `resolveBomPlan` | async | `{bom, config?}` | `{success, lines, removals, counts, parent, designId}` (no writes) |
+| `pushBom` | async | `{bom, config?}` | `{success, results, counts, warnings, parent:{itemId}}` |
+| `exportDesignFiles` | sync | `{designName?}` | `{success, files:[{name,path,size,resourceName}], warnings}` (zipped EAGLE .sch/.brd) |
+| `uploadDesignFiles` | async | `{parentItemId, files, config?}` | `{success, results:[{name,success,version,isNewVersion,error}]}` |
 
-`rows` are grouped + FM-export-ready, one per unique `(value, footprint, MPN, manufacturer)`:
+`rows` (grouped, one per `(value, footprint, MPN, manufacturer)`):
 ```
-{ mpn, manufacturer, value, footprint, quantity, referenceDesignators:[…], raw:{…} }
+{ mpn, manufacturer, value, footprint, description, quantity, referenceDesignators:[…], raw:{…} }
 ```
-Extraction (`services/electronics_bom.py`) reads `Schematic.parts` (or `board.linkedSchematic`),
-skips parts with no device package / no linked 3D-footprint name / not-populated-for-variant,
-reads MPN + MF from `Part.attributes` (case-insensitive). v1 = read & display + export-prep
-preview only; no FM writes.
+`config` keys: `itemsWs`/`mpnWs`/`supplierWs` (systemNames), `itemMapping`, `titleSource`
+(+`titleTemplate` when `'composed'`), `mpnMapping`, `supplierMapping`, `parentKeyField`,
+`refDesField` (BOM-row viewdef field link), `syncFiles`. Persisted in `app_prefs.json` under
+`electronicsBom`. See the spec for the 3-workspace model and push order.
 
 ## 10. Auth gating (uniform, base-owned)
 

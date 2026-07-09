@@ -166,12 +166,31 @@ Two-phase delivery (same pattern as Export to PLM):
 5. **Variant model** — does the export expose variants; how are they keyed
 6. **Parent item identity** — how a design maps to its parent PCBA item across re-exports (stable design URN?)
 
-Status: **Phase 1 built (2026-07-08) — needs in-Fusion smoke test.** `commands/export_electronics_bom/`
-extracts the active schematic's BOM via `adsk.electron` (`services/electronics_bom.py`), groups by
-(value, footprint, MPN, manufacturer), and displays the table + an FM-export-ready JSON payload — no
-FM writes yet. Palette on the Electronics environment panel. See `docs/PHASE4_CHARTS_AND_ELECTRONICS_BOM.md`.
-Phase 2 (resolve/preview/push to FM) still blocked on open items 1–6 above. Confirm the exact
-Electronics environment/panel ids in Fusion (`config.ELECTRONICS_WORKSPACE_ID_CANDIDATES`).
+Status: **Phase 2 shipped + verified live (2026-07). Full spec: `docs/EXPORT_ELECTRONICS_BOM_SPEC.md`.**
+Wizard (Extract → Configure → Preview → Push) pushes the BOM into WS_ITEMS: creates/updates
+component Items, creates MPN records (WS_MANUFACTURER_PN) linked from the MPN side via
+`REFERENCE_ITEM`, resolves suppliers (WS_SUPPLIERS by NAME), finds-or-creates the parent PCBA
+Item by `SOURCE_DESIGN_ID`, and full-syncs the BOM. Optional "sync design files" attaches the
+zipped EAGLE `.sch`/`.brd`. Verified live: item/MPN/supplier create+link, BOM add/qty,
+reference-designator row write, description, file upload.
+
+**Known limitations / bugs (Electronics BOM export):**
+- `Item.REFERENCE_MPN` populates via the tenant sync job, not immediately after push (canonical
+  link is `MPN.REFERENCE_ITEM`, which we set). Cosmetic only.
+- MPN match uses a scoped field-equals query with a full-text fallback; watch precision on large
+  MPN workspaces (could false-match). Verify against real data.
+- Parent identity is keyed on the design name/id (`SOURCE_DESIGN_ID`) until a stable design
+  lineage URN is available from the electronics API — renaming a design creates a new parent.
+- `refDesField` is stored as a workspace-specific viewdef field link; re-pick in Configure if the
+  tenant changes.
+- Reference designators are written to a single BOM-row field (comma-joined); no per-designator rows.
+
+**Enhancements (Electronics BOM export):**
+- Variant awareness (one parent per variant; shared children across variants).
+- Per-line match override in Preview (reuse export_to_plm inline search).
+- CSV fallback export of the mapped BOM.
+- Write richer sourcing fields onto the MPN record (datasheet/URL/cost) from part attributes.
+- Stable parent identity via a design lineage URN when the preview API exposes one.
 
 ---
 
