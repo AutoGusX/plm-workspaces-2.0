@@ -72,10 +72,11 @@ correct (see the offline test in the build session). SVG rendering itself needs 
 1. **In-Fusion smoke test (both).** Reload the add-in; sign in; open PLM Charts (confirm the
    dashboard grid + each chart type renders) and, in an Electronics design, open Export
    Electronics BOM (confirm the table + export-prep payload).
-2. **Confirm the Electronics environment/panel ids.** `core/config.py`
-   `ELECTRONICS_WORKSPACE_ID_CANDIDATES` lists guesses (`FusionElectronicsPcbEnvironment`, …).
-   Use "Write user interface to a file" in Fusion to capture the real PCB/Schematic environment +
-   tab ids and pin them down; the panel helper already tries all candidates.
+2. **Electronics environment ids — CONFIRMED (2026-07-09)** from a Fusion UI dump:
+   Schematic Editor = `SchEditorEnvironement`, PCB Editor = `BoardLayoutEnvironement`
+   (Autodesk's misspelling). Neither has a native Manage tab, so the add-in **creates its own
+   "Manage" toolbar tab** (`ELECTRONICS_MANAGE_TAB_ID`) with a "PLM" panel in both editors — the
+   button (**Export Electronics BOM**) lives there, mirroring the Design/Drawing PLM panel.
 3. **Charts: live render check.** The data path is verified; only the SVG visuals need eyes-on.
    Two-column responsive grid, ~10-color categorical palette, legend for pie/multi-series.
 4. **Electronics BOM phase 2 (future).** Resolve each row against the electronics FM workspace

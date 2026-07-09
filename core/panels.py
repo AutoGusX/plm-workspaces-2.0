@@ -178,23 +178,26 @@ def _electronics_workspaces(ui):
             yield ws
 
 
-def _electronics_panel(ws, create=True):
-    """Return (get-or-create) our Electronics panel on the workspace's best tab."""
-    tab = get_manage_tab(ws)
-    if not tab:
+def _electronics_tab(ws, create=True):
+    """Return (get-or-create) our own 'Manage' toolbar tab in an Electronics env.
+
+    The Schematic/PCB editors ship no Manage tab, so we add our own — the same role
+    the native Manage tab plays for the Design/Drawing PLM panel."""
+    try:
+        tab = ws.toolbarTabs.itemById(config.ELECTRONICS_MANAGE_TAB_ID)
+    except Exception:
+        tab = None
+    if not tab and create:
         try:
-            tabs = ws.toolbarTabs
-            # Prefer a Utilities/Tools tab; else the first tab.
-            for i in range(tabs.count):
-                t = tabs.item(i)
-                nm = (t.name or '').upper() if t else ''
-                if t and ('UTIL' in nm or 'TOOL' in nm or 'MANAGE' in nm):
-                    tab = t
-                    break
-            if not tab and tabs.count:
-                tab = tabs.item(0)
+            tab = ws.toolbarTabs.add(config.ELECTRONICS_MANAGE_TAB_ID, 'Manage')
         except Exception:
             tab = None
+    return tab
+
+
+def _electronics_panel(ws, create=True):
+    """Return (get-or-create) our PLM panel on our Electronics 'Manage' tab."""
+    tab = _electronics_tab(ws, create=create)
     if not tab:
         return None
     panel = tab.toolbarPanels.itemById(config.ELECTRONICS_PANEL_ID)
@@ -234,20 +237,29 @@ def add_command_to_electronics_panel(ui, cmd_def, is_promoted=True):
 
 
 def remove_command_from_electronics_panel(ui, cmd_id):
-    """Remove a button by cmd_id from our Electronics panels; delete empty panels."""
+    """Remove a button by cmd_id from our Electronics panel; delete the panel and our
+    'Manage' tab if they become empty."""
     for ws in _electronics_workspaces(ui):
-        panel = _electronics_panel(ws, create=False)
-        if not panel:
+        tab = _electronics_tab(ws, create=False)
+        if not tab:
             continue
-        ctrl = panel.controls.itemById(cmd_id)
-        if ctrl:
+        panel = tab.toolbarPanels.itemById(config.ELECTRONICS_PANEL_ID)
+        if panel:
+            ctrl = panel.controls.itemById(cmd_id)
+            if ctrl:
+                try:
+                    ctrl.deleteMe()
+                except Exception:
+                    pass
             try:
-                ctrl.deleteMe()
+                if panel.controls.count == 0:
+                    panel.deleteMe()
             except Exception:
                 pass
+        # Delete our custom Manage tab once it holds no panels of ours.
         try:
-            if panel.controls.count == 0:
-                panel.deleteMe()
+            if tab.toolbarPanels.count == 0:
+                tab.deleteMe()
         except Exception:
             pass
 

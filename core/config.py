@@ -32,23 +32,23 @@ CAM_UTILITIES_TAB_ID = 'UtilitiesTab'
 CAM_MANAGE_PANEL_ID = 'CAMManagePanel'              # Fusion-native; never created/deleted by us
 MANAGE_TAB_ID = 'ManageTab'
 
-# Electronics environment (PCB layout + schematic) — hosts the Export Electronics BOM
-# command. These environment ids are candidates from the Fusion Electronics preview;
-# confirm the exact ids in-Fusion (the panel helper tolerates whichever resolves).
-ELECTRONICS_PCB_WORKSPACE_ID = 'FusionElectronicsPcbEnvironment'
-ELECTRONICS_SCHEMATIC_WORKSPACE_ID = 'FusionElectronicsSchematicEnvironment'
-# Extra candidate ids seen across Fusion Electronics builds (tried in order).
+# Electronics environments that host the Export Electronics BOM command. Confirmed
+# from a Fusion "Write user interface to a file" dump (2026-07-09): the Schematic
+# Editor and PCB Editor are the ribboned environments (note Autodesk's misspelling
+# "Environement"). BOM data lives on the schematic, so the button goes in both.
+ELECTRONICS_SCHEMATIC_WORKSPACE_ID = 'SchEditorEnvironement'
+ELECTRONICS_PCB_WORKSPACE_ID = 'BoardLayoutEnvironement'
 ELECTRONICS_WORKSPACE_ID_CANDIDATES = [
-    'FusionElectronicsPcbEnvironment',
-    'FusionElectronicsSchematicEnvironment',
-    'ElectronicsPcbEnvironment',
-    'ElectronicsSchematicEnvironment',
-    'FusionElectronicsEnvironment',
+    'SchEditorEnvironement',    # Schematic Editor (BOM source)
+    'BoardLayoutEnvironement',  # PCB Editor
 ]
 
 # Our own panel on the Manage tab (created on start, removed on stop) — V2-suffixed id.
 PLM_WORKSPACES_PANEL_ID = f'{COMPANY_NAME}_{ADDIN_NAME}_PLMWorkspacesPanel_V2'
-# Our own panel in the Electronics environment(s).
+# The Electronics environments have no native Manage tab, so we create our own toolbar
+# tab ("Manage") and put our panel on it — mirroring how the PLM panel sits on the
+# Design/Drawing Manage tab.
+ELECTRONICS_MANAGE_TAB_ID = f'{COMPANY_NAME}_{ADDIN_NAME}_ElectronicsManageTab_V2'
 ELECTRONICS_PANEL_ID = f'{COMPANY_NAME}_{ADDIN_NAME}_ElectronicsPanel_V2'
 
 # Fallback when the Manage tab is not found (e.g. some locales).

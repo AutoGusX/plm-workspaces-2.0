@@ -308,8 +308,18 @@
             card._title.textContent = c.title || c.name || ('Report ' + report.id);
             card._title.title = card._title.textContent;
             card._pill.textContent = (normType(c.type) || '').toLowerCase();
+            var chartUrl = report.chartUrl || c.chartUrl || report.link || '';
+            card._openBtn.title = 'Open chart (' + chartUrl + ')';
             card._openBtn.onclick = function () {
-                plmOpenUrl(report.link || '');
+                if (!chartUrl) return;
+                // Prefer a small popup window; fall back to the system browser if the
+                // Fusion webview blocks window.open.
+                var popup = null;
+                try {
+                    popup = window.open(chartUrl, 'plmChart_' + report.id,
+                        'popup=yes,width=1000,height=780,scrollbars=yes,resizable=yes');
+                } catch (e) { popup = null; }
+                if (!popup) { plmOpenUrl(chartUrl); }
             };
             renderChart(card._body, c);
         }).catch(function (e) {

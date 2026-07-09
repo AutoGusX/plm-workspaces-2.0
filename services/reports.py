@@ -38,6 +38,9 @@ def dashboard(client):
             'id': rid,
             'position': entry.get('position', 0),
             'link': entry.get('link') or '',
+            # User-facing chart deep link (e.g. https://<tenant>.autodeskplm360.net/plm/chart/312),
+            # not the raw /api/rest/v1 link.
+            'chartUrl': f'{client.base}/plm/chart/{rid}',
         })
     reports.sort(key=lambda x: x.get('position') or 0)
     return reports, None
