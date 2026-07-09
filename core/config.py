@@ -152,6 +152,30 @@ WORKSPACE_IDS = {
 # Reverse map: static fallback for environments where systemName resolution hasn't run.
 WORKSPACE_ID_TO_COMMAND = {str(wid): key for key, wid in WORKSPACE_IDS.items()}
 
+# ---------------------------------------------------------------------------
+# Electronics BOM export — default config PRESET (suggested field mapping).
+# The wizard merges the user's saved app_prefs 'electronicsBom' section over this.
+# `itemsWs`/`mpnWs` are systemNames the user picks once (blank until chosen). Mapping
+# values are target field systemNames; the mapping UI lets the user remap to whatever
+# their workspace actually uses. Manufacturer + sourcing live on the MPN record.
+# ---------------------------------------------------------------------------
+ELECTRONICS_BOM_DEFAULT_CONFIG = {
+    'itemsWs': '',          # component + parent workspace systemName (e.g. 'WS_ITEMS')
+    'mpnWs': '',            # MPN sourcing workspace systemName
+    'itemMapping': {        # electronics BOM field -> component-Item field systemName
+        'mpn': 'MPN',                 # reference -> MPN workspace record
+        'value': 'VALUE',
+        'footprint': 'FOOTPRINT',
+        'description': 'DESCRIPTION',
+    },
+    'mpnMapping': {         # electronics BOM field -> MPN-record field systemName
+        'mpn': 'MPN',
+        'manufacturer': 'MANUFACTURER',
+    },
+    'parentKeyField': 'SOURCE_DESIGN_ID',      # stable key on the parent PCBA Item
+    'refDesField': 'REFERENCE_DESIGNATORS',    # BOM-row field for reference designators
+}
+
 # Affected Items (LINKEDITEMS tab) is served off view id 11 for all change workspaces.
 AFFECTED_ITEMS_VIEW_ID = 11
 

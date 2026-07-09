@@ -15,6 +15,7 @@ from . import workflow as _workflow
 from . import attachments as _attachments
 from . import search as _search
 from . import reports as _reports
+from . import bom as _bom
 from ..core import auth
 from ..core import http_client
 
@@ -144,6 +145,30 @@ class FmClient:
     def report_chart(self, report_id):
         """GET /api/rest/v1/reports/{id}/chart.json — normalized chart (type + series)."""
         return _reports.chart(self, report_id)
+
+    # ------------------------------------------------------------------
+    # BOM rows (electronics BOM export)
+    # ------------------------------------------------------------------
+    def read_bom(self, ws, item_id, view_id=1, depth=100):
+        return _bom.read_bom(self, ws, item_id, view_id=view_id, depth=depth)
+
+    def add_bom_row(self, parent_link, child_link, quantity, item_number=None, fields=None):
+        return _bom.add_bom_row(self, parent_link, child_link, quantity,
+                                item_number=item_number, fields=fields)
+
+    def update_bom_row(self, parent_link, edge_id, child_link, quantity, fields=None,
+                       item_number=None):
+        return _bom.update_bom_row(self, parent_link, edge_id, child_link, quantity,
+                                   fields=fields, item_number=item_number)
+
+    def remove_bom_row(self, edge_link):
+        return _bom.remove_bom_row(self, edge_link)
+
+    def item_versions(self, ws, item_id):
+        return _bom.item_versions(self, ws, item_id)
+
+    def working_item_id(self, ws, item_id):
+        return _bom.working_item_id(self, ws, item_id)
 
     # ------------------------------------------------------------------
     # Tabs / affected items / permissions

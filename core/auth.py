@@ -48,6 +48,7 @@ _TRACE_MAX = 200
 _TOKENS_FILENAME = 'tokens.json'
 _PREFS_FILENAME = 'prefs.json'           # stay-signed-in flag
 _UI_PREFS_FILENAME = 'ui_prefs.json'     # theme / text size
+_APP_PREFS_FILENAME = 'app_prefs.json'   # feature config (e.g. electronics-BOM export mapping)
 _addin_root = None
 
 
@@ -477,6 +478,47 @@ def save_ui_prefs(partial):
     if path:
         _write_secure(path, json.dumps(merged))
     return merged
+
+
+# ---------------------------------------------------------------------------
+# App preferences (feature config, e.g. the electronics-BOM export workspace/field
+# mapping). Generic namespaced JSON in app_prefs.json — NOT sanitized like ui_prefs.
+# ---------------------------------------------------------------------------
+def _app_prefs_path():
+    root = paths.get_stable_addin_root()
+    return os.path.join(root, _APP_PREFS_FILENAME) if root else None
+
+
+def load_app_prefs(section=None):
+    """Return the full app-prefs dict, or a single top-level section dict if named."""
+    path = _app_prefs_path()
+    data = {}
+    if path and os.path.isfile(path):
+        try:
+            with open(path, 'r', encoding='utf-8') as f:
+                loaded = json.load(f)
+            if isinstance(loaded, dict):
+                data = loaded
+        except (OSError, ValueError):
+            data = {}
+    if section is not None:
+        val = data.get(section)
+        return val if isinstance(val, dict) else {}
+    return data
+
+
+def save_app_prefs(section, partial):
+    """Shallow-merge `partial` into the named top-level section and persist. Returns the
+    merged section dict."""
+    path = _app_prefs_path()
+    data = load_app_prefs()
+    current = data.get(section) if isinstance(data.get(section), dict) else {}
+    if isinstance(partial, dict):
+        current.update(partial)
+    data[section] = current
+    if path:
+        _write_secure(path, json.dumps(data))
+    return current
 
 
 # ---------------------------------------------------------------------------

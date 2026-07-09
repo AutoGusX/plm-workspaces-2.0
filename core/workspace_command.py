@@ -27,6 +27,7 @@ from .action_registry import action
 from .palette_base import PaletteCommand
 from ..services import fusion_cad as _cad
 from ..services import item_payload as _payload
+from ..services import item_write as _item_write
 
 
 _DETAIL_CACHE_MAX = 50
@@ -322,39 +323,8 @@ class WorkspaceCommand(PaletteCommand):
         ws = self._ws_from(data)
         if not ws:
             return {'success': False, 'error': 'Workspace not resolved.'}
-        client = self._client(ctx)
-        fields, ferr = client.workspace_fields(ws)
-        if ferr:
-            return _api_err(ferr)
-        sec_result, serr = client.sections(ws)
-        if serr:
-            return _api_err(serr)
-        fields_meta = {f['id']: f for f in (fields or []) if f.get('id')}
-        view_id = (sec_result or {}).get('viewId', 1)
-        # The /sections endpoint carries no field->section membership, so borrow it from a
-        # reference item in this workspace (also our reliable isSystemField source on create).
-        # Fall back to the bare section list (all fields in the first section) if empty.
-        section_struct = _payload.sections_from_ws(sec_result or {}, ws)
-        ref_list, _rerr = client.items_list(ws, 0, 1)
-        ref_items = (ref_list or {}).get('items') if isinstance(ref_list, dict) else None
-        if ref_items:
-            ref_item, _e_tag, _rerr2 = client.item_detail(ws, ref_items[0].get('itemId'))
-            if ref_item:
-                section_struct = _payload.sections_from_item(ref_item, ws, for_create=True)
-                for fid, is_sys in _payload.system_fields_from_item(ref_item).items():
-                    if fid in fields_meta:
-                        fields_meta[fid]['isSystemField'] = is_sys
-        sections, missing = _payload.build_item_body(
-            'create', field_values, fields_meta, section_struct, ws, view_id)
-        if missing:
-            return {'success': False, 'missingFields': missing,
-                    'error': 'Required: ' + ', '.join(missing)}
-        if not sections:
-            return {'success': False, 'error': 'Nothing to create — no writable fields provided.'}
-        result, fetch_err = client.create_item(ws, sections)
-        if fetch_err:
-            return _api_err(fetch_err)
-        return {'success': True, 'itemId': (result or {}).get('itemId')}
+        # Shared body-build + create lives in services.item_write (reused by the BOM export).
+        return _item_write.write_item(self._client(ctx), ws, 'create', field_values)
 
     @action('updateItem', async_=True)
     def _act_update_item(self, _ctx, data):
@@ -377,33 +347,11 @@ class WorkspaceCommand(PaletteCommand):
         ws = self._ws_from(data)
         if not ws:
             return {'success': False, 'error': 'Workspace not resolved.'}
-        client = self._client(ctx)
-        fields, ferr = client.workspace_fields(ws)
-        if ferr:
-            return _api_err(ferr)
-        item, _item_etag, ierr = client.item_detail(ws, item_id)
-        if ierr:
-            return _api_err(ierr)
-        fields_meta = {f['id']: f for f in (fields or []) if f.get('id')}
-        # isSystemField is not reliable on /fields — merge it from the item detail.
-        for fid, is_sys in _payload.system_fields_from_item(item or {}).items():
-            if fid in fields_meta:
-                fields_meta[fid]['isSystemField'] = is_sys
-        section_struct = _payload.sections_from_item(item or {})
-        view_id = data.get('viewId') or 1
-        sections, missing = _payload.build_item_body(
-            'edit', field_values, fields_meta, section_struct, ws, view_id)
-        if missing:
-            return {'success': False, 'missingFields': missing,
-                    'error': 'Required: ' + ', '.join(missing)}
-        if not sections:
-            return {'success': False, 'error': 'Nothing to save — no editable changes.'}
-        fetch_err = client.update_item(ws, item_id, sections, etag)
+        result = _item_write.write_item(self._client(ctx), ws, 'edit', field_values,
+                                        item_id=item_id, etag=etag)
         # Evict stale cache entry so next getItemDetail re-fetches (on success and failure).
         self._detail_cache.pop((ws, item_id), None)
-        if fetch_err:
-            return _api_err(fetch_err)
-        return {'success': True}
+        return result
 
     @action('getAffectedItems', async_=True)
     def _act_get_affected_items(self, _ctx, data):

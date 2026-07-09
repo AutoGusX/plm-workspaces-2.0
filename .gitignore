@@ -2,6 +2,7 @@
 tokens.json
 prefs.json
 ui_prefs.json
+app_prefs.json
 
 # Python
 __pycache__/
