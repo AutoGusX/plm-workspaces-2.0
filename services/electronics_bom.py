@@ -186,6 +186,18 @@ def extract_bom(app):
         design_name = sch.name or ''
     except Exception:
         design_name = ''
+    # Stable-ish key used to find-or-create the parent PCBA item across re-exports.
+    # Prefer an id/headline if the preview API exposes one; fall back to the name.
+    design_id = ''
+    for attr in ('id', 'headline'):
+        try:
+            v = getattr(sch, attr, None)
+            if v:
+                design_id = str(v)
+                break
+        except Exception:
+            pass
+    design_id = design_id or design_name
 
     try:
         parts = sch.parts
@@ -276,6 +288,7 @@ def extract_bom(app):
 
     return {
         'design': design_name,
+        'designId': design_id,
         'rows': rows,
         'skipped': skipped,
         'partCount': part_count,

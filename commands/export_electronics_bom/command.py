@@ -17,6 +17,7 @@ from ...core import paths
 from ...core.action_registry import action
 from ...core.palette_base import PaletteCommand
 from ...services import electronics_bom as _ebom
+from . import export as _export
 
 _CONFIG_SECTION = 'electronicsBom'
 
@@ -53,17 +54,21 @@ class ExportElectronicsBomCommand(PaletteCommand):
     # ------------------------------------------------------------------
     # Configure step — workspace pickers + field mapping (persisted to app_prefs)
     # ------------------------------------------------------------------
+    def _merged_config(self, override=None):
+        """Saved prefs merged over the default preset, then any live override."""
+        merged = copy.deepcopy(config.ELECTRONICS_BOM_DEFAULT_CONFIG)
+        for src in (auth.load_app_prefs(_CONFIG_SECTION), override):
+            for key, val in (src or {}).items():
+                if isinstance(val, dict) and isinstance(merged.get(key), dict):
+                    merged[key].update(val)
+                else:
+                    merged[key] = val
+        return merged
+
     @action('getExportConfig')   # SYNC — reads local prefs only
     def _act_get_config(self, _ctx, data):
         """Return the saved export config merged over the default preset."""
-        merged = copy.deepcopy(config.ELECTRONICS_BOM_DEFAULT_CONFIG)
-        saved = auth.load_app_prefs(_CONFIG_SECTION)
-        for key, val in (saved or {}).items():
-            if isinstance(val, dict) and isinstance(merged.get(key), dict):
-                merged[key].update(val)
-            else:
-                merged[key] = val
-        return {'success': True, 'config': merged}
+        return {'success': True, 'config': self._merged_config()}
 
     @action('saveExportConfig')   # SYNC — writes local prefs only
     def _act_save_config(self, _ctx, data):
@@ -123,3 +128,30 @@ class ExportElectronicsBomCommand(PaletteCommand):
                  'isReference': bool(f.get('picklist'))}
                 for f in (fields or []) if f.get('id')]
         return {'success': True, 'workspaceId': ws, 'fields': slim}
+
+    # ------------------------------------------------------------------
+    # Preview + Push (the BOM never leaves the CAD without a preview first)
+    # ------------------------------------------------------------------
+    @action('resolveBomPlan', async_=True)
+    def _act_resolve_plan(self, _ctx, data):
+        """Resolve the export plan (match/diff, no writes). Payload: {bom, config?}."""
+        ctx, err = self._resolve_ctx()
+        if err:
+            return err
+        bom = (data or {}).get('bom') or {}
+        if not bom.get('rows'):
+            return {'success': False, 'error': 'No BOM rows to resolve — extract the BOM first.'}
+        cfg = self._merged_config((data or {}).get('config'))
+        return _export.resolve_plan(self._client(ctx), bom, cfg)
+
+    @action('pushBom', async_=True)
+    def _act_push_bom(self, _ctx, data):
+        """Execute the export (writes). Payload: {bom, config?}."""
+        ctx, err = self._resolve_ctx()
+        if err:
+            return err
+        bom = (data or {}).get('bom') or {}
+        if not bom.get('rows'):
+            return {'success': False, 'error': 'No BOM rows to push — extract the BOM first.'}
+        cfg = self._merged_config((data or {}).get('config'))
+        return _export.push_plan(self._client(ctx), bom, cfg)
